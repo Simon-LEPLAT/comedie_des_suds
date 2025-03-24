@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { PlusIcon, TrashIcon, PencilIcon } from '@heroicons/react/24/outline';
 import { getRoleColor } from '../utils/roleColors';
@@ -28,7 +28,8 @@ const UsersList = () => {
     role: 'artiste'
   });
 
-  const fetchUsers = async () => {
+  // Add useCallback
+  const fetchUsers = useCallback(async () => {
     try {
       const response = await api.get('/users');
       setUsers(response.data.data.users);
@@ -36,11 +37,11 @@ const UsersList = () => {
     } catch (err) {
       setError(err.response?.data?.message || 'Erreur lors du chargement des utilisateurs');
     }
-  };
+  }, [api]);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
 
   useEffect(() => {
     const filtered = users.filter(user => {

@@ -9,7 +9,7 @@ import Register from './pages/Register';
 import Profile from './pages/Profile';
 import Dashboard from './pages/Dashboard';
 import UsersList from './pages/UsersList';
-import UserEdit from './pages/UserEdit';
+import Calendar from './pages/Calendar';
 import LockedUsers from './pages/LockedUsers';
 
 function App() {
@@ -38,14 +38,14 @@ function App() {
                   <UsersList />
                 </PrivateRoute>
               } />
-              <Route path="/users/locked" element={
-                <PrivateRoute adminOnly={true}>
-                  <LockedUsers />
+              <Route path="/calendar" element={
+                <PrivateRoute>
+                  <Calendar />
                 </PrivateRoute>
               } />
-              <Route path="/users/:id" element={
+              <Route path="/locked-users" element={
                 <PrivateRoute adminOnly={true}>
-                  <UserEdit />
+                  <LockedUsers />
                 </PrivateRoute>
               } />
             </Routes>

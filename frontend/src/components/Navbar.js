@@ -28,6 +28,9 @@ const Navbar = () => {
                 <Link to="/dashboard" className="nav-link">
                   Tableau de bord
                 </Link>
+                <Link to="/calendar" className="text-gray-300 hover:bg-primary-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                  Calendrier
+                </Link>
                 <Link to="/profile" className="text-gray-300 hover:bg-primary-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
                   Profil
                 </Link>
@@ -36,7 +39,7 @@ const Navbar = () => {
                     <Link to="/users" className="text-gray-300 hover:bg-primary-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
                       Utilisateurs
                     </Link>
-                    <Link to="/users/locked" className="text-gray-300 hover:bg-primary-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                    <Link to="/locked-users" className="text-gray-300 hover:bg-primary-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
                       Utilisateurs bloqués
                     </Link>
                   </>

@@ -27,36 +27,19 @@ exports.protect = async (req, res, next) => {
           message: 'The user belonging to this token no longer exists'
         });
       }
-
-      if (currentUser.isLocked) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Your account has been locked'
-        });
-      }
-
+      
       req.user = currentUser;
       next();
-    } catch (err) {
-      if (err.name === 'JsonWebTokenError') {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Invalid token. Please log in again'
-        });
-      }
-      if (err.name === 'TokenExpiredError') {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Your token has expired. Please log in again'
-        });
-      }
-      throw err;
+    } catch (error) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Invalid token'
+      });
     }
   } catch (error) {
-    console.error('Auth error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       status: 'error',
-      message: 'An error occurred while authenticating'
+      message: error.message
     });
   }
 };
@@ -64,8 +47,12 @@ exports.protect = async (req, res, next) => {
 exports.restrictTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ message: 'Vous n\'avez pas la permission d\'effectuer cette action' });
+      return res.status(403).json({
+        status: 'error',
+        message: 'You do not have permission to perform this action'
+      });
     }
+    
     next();
   };
 };
