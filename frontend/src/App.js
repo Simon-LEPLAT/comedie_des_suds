@@ -38,14 +38,14 @@ function App() {
                   <UsersList />
                 </PrivateRoute>
               } />
-              <Route path="/users/:id" element={
-                <PrivateRoute adminOnly={true}>
-                  <UserEdit />
-                </PrivateRoute>
-              } />
               <Route path="/users/locked" element={
                 <PrivateRoute adminOnly={true}>
                   <LockedUsers />
+                </PrivateRoute>
+              } />
+              <Route path="/users/:id" element={
+                <PrivateRoute adminOnly={true}>
+                  <UserEdit />
                 </PrivateRoute>
               } />
             </Routes>

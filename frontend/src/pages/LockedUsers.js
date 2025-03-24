@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useContext } from 'react';
 import { getRoleColor } from '../utils/roleColors';
+import { AuthContext } from '../context/AuthContext';
 
 const LockedUsers = () => {
+  const { api } = useContext(AuthContext);
   const [lockedUsers, setLockedUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [error, setError] = useState(null);
@@ -12,12 +13,9 @@ const LockedUsers = () => {
 
   const fetchLockedUsers = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/users/locked', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setLockedUsers(response.data.data.users);
-      setFilteredUsers(response.data.data.users);
+      const response = await api.get('/users/locked');
+      setLockedUsers(response.data.data.users || []);
+      setFilteredUsers(response.data.data.users || []);
     } catch (err) {
       setError(err.response?.data?.message || 'Erreur lors du chargement des utilisateurs bloqués');
     }
@@ -42,10 +40,7 @@ const LockedUsers = () => {
 
   const handleUnlock = async (userId) => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:5000/api/users/unlock/${userId}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.post(`/users/unlock/${userId}`);
       setSuccess('Utilisateur débloqué avec succès');
       fetchLockedUsers();
     } catch (err) {

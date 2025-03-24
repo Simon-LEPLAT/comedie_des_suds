@@ -2,10 +2,65 @@ const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 
 // Generate JWT token
+// Update the signToken function
 const signToken = id => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '90d' // Changed from 30d to 90d for longer session
+    expiresIn: '90d'
   });
+};
+
+// Update the getLockedUsers function
+exports.getLockedUsers = async (req, res) => {
+  try {
+    const lockedUsers = await User.findAll({
+      where: { isLocked: true },
+      attributes: { exclude: ['password'] }
+    });
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        users: lockedUsers
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching locked users:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors de la récupération des utilisateurs bloqués'
+    });
+  }
+};
+
+// Update the unlockUser function
+exports.unlockUser = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Utilisateur non trouvé'
+      });
+    }
+    
+    await user.update({
+      isLocked: false,
+      loginAttempts: 0,
+      lastLoginAttempt: null
+    });
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Utilisateur débloqué avec succès'
+    });
+  } catch (error) {
+    console.error('Error unlocking user:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors du déblocage de l\'utilisateur'
+    });
+  }
 };
 
 // Register a new user
@@ -57,104 +112,14 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-exports.loginUser = async (req, res) => {
+// Mise à jour de la fonction getProfile
+exports.getProfile = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Veuillez fournir un email et un mot de passe'
-      });
-    }
-    
-    const user = await User.findOne({ where: { email: email } });
-    
-    if (!user) {
-      return res.status(401).json({
-        status: 'fail',
-        message: 'Email ou mot de passe incorrect'
-      });
-    }
-
-    // Check if account is locked
-    if (user.isLocked) {
-      return res.status(401).json({
-        status: 'fail',
-        message: 'Compte bloqué. Veuillez contacter un administrateur.'
-      });
-    }
-
-    const isPasswordValid = await user.correctPassword(password);
-
-    if (!isPasswordValid) {
-      // Increment login attempts
-      await user.update({
-        loginAttempts: user.loginAttempts + 1,
-        lastLoginAttempt: new Date()
-      });
-
-      // Lock account if 3 failed attempts
-      if (user.loginAttempts >= 3) {
-        await user.update({ isLocked: true });
-        return res.status(401).json({
-          status: 'fail',
-          message: 'Compte bloqué après 3 tentatives échouées. Contactez un administrateur.'
-        });
-      }
-
-      return res.status(401).json({
-        status: 'fail',
-        message: `Email ou mot de passe incorrect. ${3 - user.loginAttempts} tentatives restantes.`
-      });
-    }
-
-    // Reset login attempts on successful login
-    await user.update({
-      loginAttempts: 0,
-      lastLoginAttempt: null
-    });
-    
-    const token = signToken(user.id);
-    
-    res.status(200).json({
-      status: 'success',
-      token,
-      data: { user }
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(400).json({
-      status: 'fail',
-      message: 'Une erreur est survenue lors de la connexion'
-    });
-  }
-};
-
-// Add new controller for unlocking accounts
-exports.getLockedUsers = async (req, res) => {
-  try {
-    const lockedUsers = await User.findAll({
-      where: { isLocked: true },
+    // req.user est déjà défini par le middleware protect
+    const user = await User.findByPk(req.user.id, {
       attributes: { exclude: ['password'] }
     });
-    
-    res.status(200).json({
-      status: 'success',
-      data: { users: lockedUsers }
-    });
-  } catch (error) {
-    res.status(400).json({
-      status: 'fail',
-      message: error.message
-    });
-  }
-};
 
-exports.unlockUser = async (req, res) => {
-  try {
-    const user = await User.findByPk(req.params.id);
-    
     if (!user) {
       return res.status(404).json({
         status: 'fail',
@@ -162,29 +127,6 @@ exports.unlockUser = async (req, res) => {
       });
     }
 
-    await user.update({
-      isLocked: false,
-      loginAttempts: 0,
-      lastLoginAttempt: null
-    });
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Compte débloqué avec succès'
-    });
-  } catch (error) {
-    res.status(400).json({
-      status: 'fail',
-      message: error.message
-    });
-  }
-};
-
-// Get user profile
-exports.getProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    
     res.status(200).json({
       status: 'success',
       data: {
@@ -192,9 +134,105 @@ exports.getProfile = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(400).json({
-      status: 'fail',
-      message: error.message
+    console.error('Error fetching profile:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Erreur lors de la récupération du profil'
+    });
+  }
+};
+
+// Mise à jour de la fonction loginUser
+exports.loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Veuillez fournir un email et un mot de passe'
+      });
+    }
+    
+    const user = await User.findOne({ where: { email } });
+    
+    if (!user) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Email ou mot de passe incorrect'
+      });
+    }
+
+    // Vérifier si le compte est bloqué
+    if (user.isLocked) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Votre compte est bloqué. Veuillez contacter un administrateur.'
+      });
+    }
+
+    const isPasswordCorrect = await user.correctPassword(password);
+    
+    if (!isPasswordCorrect) {
+      // Incrémenter le nombre de tentatives de connexion
+      const loginAttempts = user.loginAttempts + 1;
+      const updates = {
+        loginAttempts,
+        lastLoginAttempt: new Date()
+      };
+      
+      // Bloquer le compte après 5 tentatives échouées
+      if (loginAttempts >= 5) {
+        updates.isLocked = true;
+      }
+      
+      await user.update(updates);
+      
+      return res.status(401).json({
+        status: 'error',
+        message: loginAttempts >= 5 
+          ? 'Trop de tentatives échouées. Votre compte a été bloqué.' 
+          : 'Email ou mot de passe incorrect'
+      });
+    }
+
+    // Réinitialiser les tentatives de connexion en cas de succès
+    await user.update({
+      loginAttempts: 0,
+      lastLoginAttempt: null
+    });
+
+    // Créer le token
+    const token = signToken(user.id);
+    
+    // Exclure le mot de passe de la réponse
+    const userWithoutPassword = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      address: user.address,
+      birthDate: user.birthDate,
+      birthPlace: user.birthPlace,
+      socialSecurityNumber: user.socialSecurityNumber,
+      showLeaveNumber: user.showLeaveNumber,
+      phone: user.phone,
+      iban: user.iban
+    };
+    
+    res.status(200).json({
+      status: 'success',
+      token,
+      data: {
+        user: userWithoutPassword
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Une erreur est survenue lors de la connexion'
     });
   }
 };

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { PlusIcon, TrashIcon, PencilIcon } from '@heroicons/react/24/outline';
 import { getRoleColor } from '../utils/roleColors';
+import { AuthContext } from '../context/AuthContext';
 
 const UsersList = () => {
+  const { api } = useContext(AuthContext);
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [error, setError] = useState(null);
@@ -29,10 +30,7 @@ const UsersList = () => {
 
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/users', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/users');
       setUsers(response.data.data.users);
       setFilteredUsers(response.data.data.users);
     } catch (err) {
@@ -60,13 +58,7 @@ const UsersList = () => {
   const handleAddUser = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      await axios.post('http://localhost:5000/api/users/register', newUser, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      await api.post('/users/register', newUser);
       setSuccess('Utilisateur créé avec succès');
       setShowAddModal(false);
       // Refresh users list
@@ -79,10 +71,7 @@ const UsersList = () => {
   const handleDeleteUser = async (userId) => {
     if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
       try {
-        const token = localStorage.getItem('token');
-        await axios.delete(`http://localhost:5000/api/users/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        await api.delete(`/users/${userId}`);
         setSuccess('Utilisateur supprimé avec succès');
         setUsers(users.filter(user => user.id !== userId));
       } catch (err) {

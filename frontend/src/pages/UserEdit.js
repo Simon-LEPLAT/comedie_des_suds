@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { AuthContext } from '../context/AuthContext';
 
 const UserEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { api } = useContext(AuthContext);
+  
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -24,10 +26,7 @@ const UserEdit = () => {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get(`http://localhost:5000/api/users/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const response = await api.get(`/users/${id}`);
         const userData = response.data.data.user;
         setFormData({
           ...userData,
@@ -39,18 +38,12 @@ const UserEdit = () => {
     };
 
     fetchUser();
-  }, [id]);
+  }, [id, api]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:5000/api/users/${id}`, formData, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      await api.put(`/users/${id}`, formData);
       setSuccess('Profil mis à jour avec succès');
       setTimeout(() => navigate('/users'), 2000);
     } catch (err) {

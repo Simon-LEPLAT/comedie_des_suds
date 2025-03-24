@@ -10,32 +10,53 @@ exports.protect = async (req, res, next) => {
     }
     
     if (!token) {
-      return res.status(401).json({ 
-        status: 'fail',
-        message: 'Vous n\'êtes pas connecté. Veuillez vous connecter pour accéder à cette ressource.' 
+      return res.status(401).json({
+        status: 'error',
+        message: 'Please log in to access this resource'
       });
     }
-    
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Check if user still exists
-    const currentUser = await User.findByPk(decoded.id);
-    if (!currentUser) {
-      return res.status(401).json({ 
-        status: 'fail',
-        message: 'L\'utilisateur associé à ce token n\'existe plus.' 
-      });
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      const currentUser = await User.findByPk(decoded.id);
+      
+      if (!currentUser) {
+        return res.status(401).json({
+          status: 'error',
+          message: 'The user belonging to this token no longer exists'
+        });
+      }
+
+      if (currentUser.isLocked) {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Your account has been locked'
+        });
+      }
+
+      req.user = currentUser;
+      next();
+    } catch (err) {
+      if (err.name === 'JsonWebTokenError') {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Invalid token. Please log in again'
+        });
+      }
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Your token has expired. Please log in again'
+        });
+      }
+      throw err;
     }
-    
-    // Grant access to protected route
-    req.user = currentUser;
-    next();
   } catch (error) {
     console.error('Auth error:', error);
-    res.status(401).json({ 
-      status: 'fail',
-      message: 'Session expirée ou token invalide. Veuillez vous reconnecter.' 
+    return res.status(500).json({
+      status: 'error',
+      message: 'An error occurred while authenticating'
     });
   }
 };

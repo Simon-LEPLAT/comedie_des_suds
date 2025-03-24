@@ -8,120 +8,107 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Add token refresh function
+  // Create a custom axios instance with default config
+  const api = axios.create({
+    baseURL: 'http://localhost:5000/api',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
+
+  // Add request interceptor to add token to all requests
+  api.interceptors.request.use(
+    (config) => {
+      const storedToken = localStorage.getItem('token');
+      if (storedToken) {
+        config.headers.Authorization = `Bearer ${storedToken}`;
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+
+  // Add response interceptor to handle token errors
+  api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      // Only handle auth errors if we're initialized
+      if (isInitialized && (error.response?.status === 401 || error.response?.status === 403)) {
+        // Don't clear token during profile fetch to prevent logout loops
+        if (!error.config.url.includes('/users/profile')) {
+          localStorage.removeItem('token');
+          setToken(null);
+          setUser(null);
+        }
+      }
+      return Promise.reject(error);
+    }
+  );
+
   const refreshToken = useCallback(async () => {
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      try {
-        const config = {
-          headers: {
-            Authorization: `Bearer ${storedToken}`
-          }
-        };
-        
-        const res = await axios.get('http://localhost:5000/api/users/profile', config);
+    try {
+      const storedToken = localStorage.getItem('token');
+      if (!storedToken) {
+        setLoading(false);
+        setIsInitialized(true);
+        return;
+      }
+
+      // Use direct axios call to avoid interceptor loop
+      const res = await axios.get('http://localhost:5000/api/users/profile', {
+        headers: {
+          Authorization: `Bearer ${storedToken}`
+        }
+      });
+      
+      if (res.data.status === 'success') {
         setUser(res.data.data.user);
         setToken(storedToken);
-      } catch (err) {
-        console.error('Token refresh error:', err);
+      } else {
+        // Clear token if response is not successful
         localStorage.removeItem('token');
         setToken(null);
         setUser(null);
       }
+    } catch (err) {
+      console.error('Token refresh error:', err);
+      // Only clear token if it's not a network error
+      if (err.response) {
+        localStorage.removeItem('token');
+        setToken(null);
+        setUser(null);
+      }
+    } finally {
+      setLoading(false);
+      setIsInitialized(true);
     }
-    setLoading(false);
-  }, []); // Empty dependency array since this function doesn't depend on any external values
+  }, []);
 
   useEffect(() => {
     refreshToken();
   }, [refreshToken]);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      const storedToken = localStorage.getItem('token');
-      if (storedToken) {
-        try {
-          const config = {
-            headers: {
-              Authorization: `Bearer ${storedToken}`
-            }
-          };
-          
-          const res = await axios.get('http://localhost:5000/api/users/profile', config);
-          setUser(res.data.data.user);
-          setToken(storedToken);
-        } catch (err) {
-          console.error('Token validation error:', err);
-          localStorage.removeItem('token');
-          setToken(null);
-          setUser(null);
-          setError('Session expirée, veuillez vous reconnecter');
-        }
-      }
-      setLoading(false);
-    };
-    
-    loadUser();
-  }, []);
-
-  const updateProfile = async (userData) => {
-    try {
-      const config = {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        }
-      };
-      
-      const res = await axios.put('http://localhost:5000/api/users/profile', userData, config);
-      
-      if (res.data.status === 'success') {
-        setUser(res.data.data.user);
-      }
-      return res.data;
-    } catch (err) {
-      console.error('Update profile error:', err);
-      if (err.response?.status === 401) {
-        localStorage.removeItem('token');
-        setToken(null);
-        setUser(null);
-      }
-      setError(err.response?.data?.message || 'Une erreur est survenue lors de la mise à jour du profil');
-      throw err;
-    }
-  };
-
-  const register = async (userData) => {
-    try {
-      const res = await axios.post('http://localhost:5000/api/users/register', userData);
-      
-      if (res.data.token) {
-        localStorage.setItem('token', res.data.token);
-        setToken(res.data.token);
-        setUser(res.data.data.user);
-      }
-      
-      return res.data;
-    } catch (err) {
-      setError(err.response?.data?.message || 'Une erreur est survenue');
-      throw err;
-    }
-  };
-
   const login = async (email, password) => {
     try {
-      const res = await axios.post('http://localhost:5000/api/users/login', { email, password });
+      // Use direct axios call for login
+      const res = await axios.post('http://localhost:5000/api/users/login', { 
+        email, 
+        password 
+      });
       
       if (res.data.token) {
         localStorage.setItem('token', res.data.token);
         setToken(res.data.token);
         setUser(res.data.data.user);
+        setError(null);
       }
       
       return res.data;
     } catch (err) {
-      setError(err.response?.data?.message || 'Email ou mot de passe incorrect');
+      console.error('Login error:', err);
+      setError(err.response?.data?.message || 'Une erreur est survenue lors de la connexion');
       throw err;
     }
   };
@@ -130,22 +117,59 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
     setToken(null);
     setUser(null);
+    setError(null);
+  };
+
+  const register = async (userData) => {
+    try {
+      const res = await api.post('/users/register', userData);
+      
+      if (res.data.token) {
+        localStorage.setItem('token', res.data.token);
+        setToken(res.data.token);
+        setUser(res.data.data.user);
+        setError(null);
+      }
+      
+      return res.data;
+    } catch (err) {
+      console.error('Registration error:', err);
+      setError(err.response?.data?.message || 'Une erreur est survenue lors de l\'inscription');
+      throw err;
+    }
+  };
+
+  const updateProfile = async (userData) => {
+    try {
+      const res = await api.put('/users/profile', userData);
+      
+      if (res.data.status === 'success') {
+        setUser(res.data.data.user);
+        setError(null);
+      }
+      
+      return res.data;
+    } catch (err) {
+      console.error('Profile update error:', err);
+      setError(err.response?.data?.message || 'Une erreur est survenue lors de la mise à jour du profil');
+      throw err;
+    }
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        loading,
-        error,
-        register,
-        login,
-        logout,
-        updateProfile,
-        setError
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      token,
+      loading,
+      error,
+      setError,
+      login,
+      logout,
+      register,
+      updateProfile,
+      refreshToken,
+      api
+    }}>
       {children}
     </AuthContext.Provider>
   );
