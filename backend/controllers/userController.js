@@ -143,13 +143,14 @@ exports.getProfile = async (req, res) => {
 };
 
 // Mise à jour de la fonction loginUser
+// Update the loginUser function to include remaining attempts in the response
 exports.loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
     
     if (!email || !password) {
       return res.status(400).json({
-        status: 'error',
+        status: 'fail',
         message: 'Veuillez fournir un email et un mot de passe'
       });
     }
@@ -158,81 +159,76 @@ exports.loginUser = async (req, res) => {
     
     if (!user) {
       return res.status(401).json({
-        status: 'error',
-        message: 'Email ou mot de passe incorrect'
+        status: 'fail',
+        message: 'Email ou mot de passe incorrect',
+        remainingAttempts: 5 // Default max attempts
       });
     }
-
-    // Vérifier si le compte est bloqué
+    
+    // Check if account is locked
     if (user.isLocked) {
       return res.status(401).json({
-        status: 'error',
+        status: 'fail',
         message: 'Votre compte est bloqué. Veuillez contacter un administrateur.'
       });
     }
-
+    
+    // Update last login attempt time
+    await user.update({ lastLoginAttempt: new Date() });
+    
     const isPasswordCorrect = await user.correctPassword(password);
     
     if (!isPasswordCorrect) {
-      // Incrémenter le nombre de tentatives de connexion
-      const loginAttempts = user.loginAttempts + 1;
-      const updates = {
-        loginAttempts,
-        lastLoginAttempt: new Date()
-      };
+      // Increment login attempts
+      const newAttempts = user.loginAttempts + 1;
+      const maxAttempts = 5; // Maximum allowed attempts
+      const remainingAttempts = maxAttempts - newAttempts;
       
-      // Bloquer le compte après 5 tentatives échouées
-      if (loginAttempts >= 5) {
-        updates.isLocked = true;
+      // Check if account should be locked
+      if (newAttempts >= maxAttempts) {
+        await user.update({
+          loginAttempts: newAttempts,
+          isLocked: true
+        });
+        
+        return res.status(401).json({
+          status: 'fail',
+          message: 'Compte bloqué après plusieurs tentatives échouées. Veuillez contacter un administrateur.',
+          remainingAttempts: 0
+        });
       }
       
-      await user.update(updates);
+      // Update login attempts
+      await user.update({ loginAttempts: newAttempts });
       
       return res.status(401).json({
-        status: 'error',
-        message: loginAttempts >= 5 
-          ? 'Trop de tentatives échouées. Votre compte a été bloqué.' 
-          : 'Email ou mot de passe incorrect'
+        status: 'fail',
+        message: 'Email ou mot de passe incorrect',
+        remainingAttempts: remainingAttempts
       });
     }
-
-    // Réinitialiser les tentatives de connexion en cas de succès
-    await user.update({
-      loginAttempts: 0,
-      lastLoginAttempt: null
-    });
-
-    // Créer le token
+    
+    // Reset login attempts on successful login
+    await user.update({ loginAttempts: 0 });
+    
+    // Generate token
     const token = signToken(user.id);
     
-    // Exclure le mot de passe de la réponse
-    const userWithoutPassword = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role,
-      address: user.address,
-      birthDate: user.birthDate,
-      birthPlace: user.birthPlace,
-      socialSecurityNumber: user.socialSecurityNumber,
-      showLeaveNumber: user.showLeaveNumber,
-      phone: user.phone,
-      iban: user.iban
-    };
+    // Remove password from output
+    user.password = undefined;
     
     res.status(200).json({
       status: 'success',
       token,
       data: {
-        user: userWithoutPassword
+        user
       }
     });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Une erreur est survenue lors de la connexion'
+      message: 'Erreur lors de la connexion'
     });
   }
 };

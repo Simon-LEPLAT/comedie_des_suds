@@ -1,23 +1,24 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
+import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 const Profile = () => {
-  const { user, updateProfile, error, setError } = useContext(AuthContext);
-  const [formError, setFormError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const { user, api } = useContext(AuthContext);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
+    phone: '',
     address: '',
     birthDate: '',
     birthPlace: '',
     socialSecurityNumber: '',
     showLeaveNumber: '',
-    phone: '',
-    iban: '',
-    role: ''
+    iban: ''
   });
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -25,253 +26,275 @@ const Profile = () => {
         firstName: user.firstName || '',
         lastName: user.lastName || '',
         email: user.email || '',
+        phone: user.phone || '',
         address: user.address || '',
         birthDate: user.birthDate ? new Date(user.birthDate).toISOString().split('T')[0] : '',
         birthPlace: user.birthPlace || '',
         socialSecurityNumber: user.socialSecurityNumber || '',
         showLeaveNumber: user.showLeaveNumber || '',
-        phone: user.phone || '',
-        iban: user.iban || '',
-        role: user.role || ''
+        iban: user.iban || ''
       });
     }
   }, [user]);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
-  const handleSubmit = async (e) => {
+  const updateProfile = async (e) => {
     e.preventDefault();
-    setFormError('');
-    setSuccessMessage('');
-
+    setError('');
+    setSuccess('');
+    
     try {
-      await updateProfile(formData);
-      setSuccessMessage('Profil mis à jour avec succès');
-      window.scrollTo(0, 0);
+      const response = await api.put('/users/profile', formData);
+      setSuccess('Profil mis à jour avec succès');
+      setIsEditing(false);
+      // Update the user context if needed
     } catch (err) {
-      setFormError(err.response?.data?.message || 'Une erreur est survenue');
-      window.scrollTo(0, 0);
+      setError(err.response?.data?.message || 'Erreur lors de la mise à jour du profil');
     }
   };
 
+  const cancelEdit = () => {
+    // Reset form data to original user data
+    if (user) {
+      setFormData({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        address: user.address || '',
+        birthDate: user.birthDate ? new Date(user.birthDate).toISOString().split('T')[0] : '',
+        birthPlace: user.birthPlace || '',
+        socialSecurityNumber: user.socialSecurityNumber || '',
+        showLeaveNumber: user.showLeaveNumber || '',
+        iban: user.iban || ''
+      });
+    }
+    setIsEditing(false);
+    setError('');
+  };
+
   return (
-    <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden mt-10 border-t-4 border-primary">
-      <div className="p-8">
-        <div className="uppercase tracking-wide text-xl text-primary font-bold mb-6 text-center">Mon Profil</div>
-        
-        {formError && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-            <span className="block sm:inline">{formError}</span>
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
-            <span className="block sm:inline">{successMessage}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="firstName">
-              Prénom
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="firstName"
-              name="firstName"
-              type="text"
-              required
-              value={formData.firstName}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="lastName">
-              Nom
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="lastName"
-              name="lastName"
-              type="text"
-              required
-              value={formData.lastName}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
-              Email
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="email"
-              name="email"
-              type="email"
-              required
-              value={formData.email}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="phone">
-              Téléphone
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="phone"
-              name="phone"
-              type="tel"
-              pattern="[0-9]{10}"
-              required
-              value={formData.phone}
-              onChange={handleChange}
-            />
-            <p className="text-xs text-gray-500 mt-1">Format: 10 chiffres requis</p>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="address">
-              Adresse
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="address"
-              name="address"
-              type="text"
-              required
-              value={formData.address}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="birthDate">
-              Date de naissance
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="birthDate"
-              name="birthDate"
-              type="date"
-              required
-              value={formData.birthDate}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="birthPlace">
-              Lieu de naissance
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="birthPlace"
-              name="birthPlace"
-              type="text"
-              required
-              value={formData.birthPlace}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="socialSecurityNumber">
-              Numéro de sécurité sociale
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="socialSecurityNumber"
-              name="socialSecurityNumber"
-              type="text"
-              pattern="[0-9]{15}"
-              required
-              value={formData.socialSecurityNumber}
-              onChange={handleChange}
-            />
-            <p className="text-xs text-gray-500 mt-1">Format: 15 chiffres requis</p>
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="showLeaveNumber">
-              Numéro congés spectacles
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="showLeaveNumber"
-              name="showLeaveNumber"
-              type="text"
-              required
-              value={formData.showLeaveNumber}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="iban">
-              IBAN
-            </label>
-            <input
-              className="form-input w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-              id="iban"
-              name="iban"
-              type="text"
-              required
-              value={formData.iban}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="role">
-              Rôle
-            </label>
-            {user?.role === 'administrateur' ? (
-              <select
-                className="form-select w-full rounded-md border-gray-300 focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
-                id="role"
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
+    <div className="max-w-4xl mx-auto">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        {/* Profile Header */}
+        <div className="bg-gradient-to-r from-primary to-secondary p-6 text-white">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold">Mon Profil</h1>
+              <p className="text-gold opacity-90 mt-1">Gérez vos informations personnelles</p>
+            </div>
+            {!isEditing ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center px-4 py-2 bg-gold text-primary rounded-lg hover:bg-gold/90 transition-all shadow-md"
               >
-                <option value="administrateur">Administrateur</option>
-                <option value="artiste">Artiste</option>
-                <option value="billeterie">Billeterie</option>
-                <option value="permanence">Permanence</option>
-                <option value="regie">Régie</option>
-              </select>
+                <PencilIcon className="h-5 w-5 mr-2" />
+                Modifier
+              </button>
             ) : (
+              <div className="flex space-x-2">
+                <button
+                  onClick={cancelEdit}
+                  className="flex items-center px-4 py-2 bg-white text-red-600 rounded-lg hover:bg-red-50 transition-all shadow-md"
+                >
+                  <XMarkIcon className="h-5 w-5 mr-2" />
+                  Annuler
+                </button>
+                <button
+                  onClick={updateProfile}
+                  className="flex items-center px-4 py-2 bg-gold text-primary rounded-lg hover:bg-gold/90 transition-all shadow-md"
+                >
+                  <CheckIcon className="h-5 w-5 mr-2" />
+                  Enregistrer
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Alerts */}
+        {error && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mx-6 mt-6 rounded shadow-md" role="alert">
+            <p className="font-bold">Erreur</p>
+            <p>{error}</p>
+          </div>
+        )}
+        
+        {success && (
+          <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mx-6 mt-6 rounded shadow-md" role="alert">
+            <p className="font-bold">Succès</p>
+            <p>{success}</p>
+          </div>
+        )}
+        
+        {/* Profile Form */}
+        <form className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Personal Information Section */}
+            <div className="md:col-span-2">
+              <h2 className="text-xl font-semibold text-primary border-b border-gray-200 pb-2 mb-4">
+                Informations personnelles
+              </h2>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                <input
+                  type="text"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date de naissance</label>
+                <input
+                  type="date"
+                  name="birthDate"
+                  value={formData.birthDate}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Numéro de sécurité sociale</label>
+                <input
+                  type="text"
+                  name="socialSecurityNumber"
+                  value={formData.socialSecurityNumber}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Lieu de naissance</label>
+                <input
+                  type="text"
+                  name="birthPlace"
+                  value={formData.birthPlace}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Numéro de congé spectacle</label>
+                <input
+                  type="text"
+                  name="showLeaveNumber"
+                  value={formData.showLeaveNumber}
+                  onChange={handleChange}
+                  disabled={!isEditing}
+                  className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
+                />
+              </div>
+            </div>
+            
+            {/* Address and Banking Section */}
+            <div className="md:col-span-2">
+              <h2 className="text-xl font-semibold text-primary border-b border-gray-200 pb-2 mb-4 mt-4">
+                Adresse et coordonnées bancaires
+              </h2>
+            </div>
+            
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
               <input
-                className="form-input w-full rounded-md border-gray-300 bg-gray-100 cursor-not-allowed"
-                id="role"
-                name="role"
                 type="text"
-                value={formData.role}
-                disabled
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                disabled={!isEditing}
+                className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
               />
-            )}
-            {!user?.role === 'administrateur' && (
-              <p className="text-xs text-gray-500 mt-1">Le rôle ne peut être modifié que par un administrateur</p>
-            )}
+            </div>
+            
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">IBAN</label>
+              <input
+                type="text"
+                name="iban"
+                value={formData.iban}
+                onChange={handleChange}
+                disabled={!isEditing}
+                className={`form-input ${isEditing ? 'bg-white border-gold focus:ring-gold' : 'bg-gray-50'}`}
+              />
+            </div>
           </div>
-
-          <div className="md:col-span-2 mt-6">
-            <button
-              type="submit"
-              className="w-full bg-primary text-white font-bold py-3 px-6 rounded-md hover:bg-accent transition-colors duration-300 text-lg"
-            >
-              Mettre à jour le profil
-            </button>
-          </div>
+          
+          {/* Mobile Edit Buttons (visible only on small screens) */}
+          {isEditing && (
+            <div className="mt-8 flex justify-end space-x-3 md:hidden">
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg shadow-sm hover:bg-red-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={updateProfile}
+                className="px-4 py-2 bg-primary text-white rounded-lg shadow-sm hover:bg-accent"
+              >
+                Enregistrer
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

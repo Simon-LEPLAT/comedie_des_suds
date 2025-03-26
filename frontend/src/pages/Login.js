@@ -6,6 +6,7 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
+  const [remainingAttempts, setRemainingAttempts] = useState(null);
   
   const { login, user, error, setError } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -24,11 +25,17 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
+    setRemainingAttempts(null);
     
     try {
       await login(email, password);
     } catch (err) {
       setFormError(err.response?.data?.message || 'Une erreur est survenue');
+      
+      // Check if the response contains remaining attempts information
+      if (err.response?.data?.remainingAttempts !== undefined) {
+        setRemainingAttempts(err.response?.data?.remainingAttempts);
+      }
     }
   };
   
@@ -40,50 +47,46 @@ const Login = () => {
         {formError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
             <span className="block sm:inline">{formError}</span>
+            {remainingAttempts !== null && (
+              <p className="mt-1 text-sm">
+                Il vous reste <span className="font-bold">{remainingAttempts}</span> tentative{remainingAttempts > 1 ? 's' : ''} avant le blocage de votre compte.
+              </p>
+            )}
           </div>
         )}
         
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
-              Email
-            </label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
-              className="form-input"
-              id="email"
               type="email"
-              placeholder="Email"
+              id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
             />
           </div>
           
           <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
-              Mot de passe
-            </label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Mot de passe</label>
             <input
-              className="form-input"
-              id="password"
               type="password"
-              placeholder="Mot de passe"
+              id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
             />
           </div>
           
-          <div className="flex items-center justify-between mb-4">
+          <div>
             <button
-              className="btn-primary"
               type="submit"
+              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
             >
               Se connecter
             </button>
-            <Link to="/register" className="inline-block align-baseline font-bold text-sm text-primary hover:text-primary/80">
-              Créer un compte
-            </Link>
           </div>
         </form>
       </div>

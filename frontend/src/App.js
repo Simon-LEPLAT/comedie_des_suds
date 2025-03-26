@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import Profile from './pages/Profile';
 import Dashboard from './pages/Dashboard';
 import UsersList from './pages/UsersList';
+import UserEdit from './pages/UserEdit'; // Add this import
 import Calendar from './pages/Calendar';
 import LockedUsers from './pages/LockedUsers';
 
@@ -16,7 +17,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-white"> {/* Changed from bg-cream to bg-white */}
           <Navbar />
           <div className="container mx-auto px-4 py-8">
             <Routes>
@@ -36,6 +37,11 @@ function App() {
               <Route path="/users" element={
                 <PrivateRoute adminOnly={true}>
                   <UsersList />
+                </PrivateRoute>
+              } />
+              <Route path="/users/edit/:id" element={
+                <PrivateRoute adminOnly={true}>
+                  <UserEdit />
                 </PrivateRoute>
               } />
               <Route path="/calendar" element={

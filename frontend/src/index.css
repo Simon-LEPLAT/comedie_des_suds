@@ -4,12 +4,12 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  @apply bg-gray-50;
+  @apply bg-white text-charcoal; /* Changed from bg-cream to bg-white */
 }
 
 .form-input {
@@ -22,4 +22,50 @@ body {
 
 .nav-link {
   @apply text-white hover:bg-accent px-3 py-2 rounded-md text-sm font-medium transition-colors duration-300;
+}
+
+/* New professional card styles */
+.card {
+  @apply bg-offwhite rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300;
+}
+
+.card-header {
+  @apply border-b border-gray-200 p-4 bg-gradient-to-r from-primary/10 to-white; /* Changed from to-cream to to-white */
+}
+
+.card-body {
+  @apply p-4;
+}
+
+.btn-gold {
+  @apply bg-gold text-navy font-medium px-4 py-2 rounded-md hover:bg-gold/80 transition-colors;
+}
+
+.btn-outline {
+  @apply border border-primary text-primary px-4 py-2 rounded-md hover:bg-primary/10 transition-colors;
+}
+
+.section-title {
+  @apply text-2xl font-bold text-primary border-b-2 border-gold pb-2 mb-6 inline-block;
+}
+
+.input-decorated {
+  @apply border-l-4 border-l-primary focus:border-l-gold;
+}
+
+/* Table styles */
+.table-elegant {
+  @apply w-full border-collapse;
+}
+
+.table-elegant th {
+  @apply bg-primary text-white p-3 text-left;
+}
+
+.table-elegant tr {
+  @apply border-b border-gray-200 hover:bg-gray-50; /* Changed from hover:bg-cream/50 to hover:bg-gray-50 */
+}
+
+.table-elegant td {
+  @apply p-3;
 }

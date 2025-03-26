@@ -5,6 +5,7 @@ const sequelize = require('./config/database');
 const userRoutes = require('./routes/userRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const eventRoutes = require('./routes/eventRoutes');
+const path = require('path'); // Add this line to import the path module
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -37,3 +38,6 @@ async function startServer() {
 }
 
 startServer();
+
+// Add this to your server.js file to serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

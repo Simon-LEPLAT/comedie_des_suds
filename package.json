@@ -3,6 +3,7 @@
     "@fullcalendar/daygrid": "^6.1.15",
     "@fullcalendar/interaction": "^6.1.15",
     "@fullcalendar/react": "^6.1.15",
-    "@fullcalendar/timegrid": "^6.1.15"
+    "@fullcalendar/timegrid": "^6.1.15",
+    "multer": "^1.4.5-lts.2"
   }
 }

@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 const Register = () => {
+  const { register } = useContext(AuthContext); // Remove error and setError if not used
   const navigate = useNavigate();
-  const { register, error, setError } = useContext(AuthContext);
   const [formError, setFormError] = useState('');
 
   const [formData, setFormData] = useState({
