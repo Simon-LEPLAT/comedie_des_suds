@@ -20,7 +20,7 @@ const User = sequelize.define('User', {
   email: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true,
+    // Remove the unique: true line
     validate: {
       isEmail: { msg: 'Veuillez entrer un email valide' }
     }
@@ -53,7 +53,6 @@ const User = sequelize.define('User', {
   socialSecurityNumber: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true
   },
   showLeaveNumber: {
     type: DataTypes.STRING,

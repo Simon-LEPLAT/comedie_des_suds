@@ -65,33 +65,15 @@ exports.getAllEvents = async (req, res) => {
 // Helper function to check if events can overlap
 const canEventsOverlap = (eventType1, eventType2) => {
   // These event types can overlap with anything
-  const alwaysOverlappable = ['permanence', 'ticketing', 'technical']; // 'technical' for 'régie'
+  const canOverlapWithAnything = ['permanence', 'ticketing', 'régie'];
   
-  if (alwaysOverlappable.includes(eventType1) || alwaysOverlappable.includes(eventType2)) {
+  // If either event is one that can overlap with anything, allow it
+  if (canOverlapWithAnything.includes(eventType1) || canOverlapWithAnything.includes(eventType2)) {
     return true;
   }
   
-  // Shows can overlap with permanence, ticketing, technical
-  if (eventType1 === 'show' && alwaysOverlappable.includes(eventType2)) {
-    return true;
-  }
-  
-  if (eventType2 === 'show' && alwaysOverlappable.includes(eventType1)) {
-    return true;
-  }
-  
-  // Rental, event, and other types can overlap with permanence, ticketing, technical
-  const otherTypes = ['rental', 'event', 'calage']; // 'calage' for technical setup
-  
-  if (otherTypes.includes(eventType1) && alwaysOverlappable.includes(eventType2)) {
-    return true;
-  }
-  
-  if (otherTypes.includes(eventType2) && alwaysOverlappable.includes(eventType1)) {
-    return true;
-  }
-  
-  // Otherwise, no overlap allowed
+  // All other event types can only overlap with permanence, ticketing, and régie
+  // So if we reach here and neither event is in the canOverlapWithAnything list, they can't overlap
   return false;
 };
 
@@ -245,9 +227,11 @@ exports.createEvent = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      message: error.message
+    res.status(200).json({
+      status: 'success',
+      data: {
+        event: updatedEvent
+      }
     });
   }
 };

@@ -20,7 +20,7 @@ const Event = sequelize.define('Event', {
     allowNull: false
   },
   type: {
-    type: DataTypes.ENUM('show', 'permanence', 'ticketing', 'technical', 'rental', 'event', 'calage'),
+    type: DataTypes.ENUM('show', 'permanence', 'ticketing', 'régie', 'rental', 'calage', 'event'),
     defaultValue: 'show'
   },
   // Add show status field
