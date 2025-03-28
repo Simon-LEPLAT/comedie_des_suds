@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { AuthContext } from '../context/AuthContext';
-import { PlusIcon, XMarkIcon, MapPinIcon, ClockIcon, UserIcon, DocumentIcon } from '@heroicons/react/24/outline';
+import { 
+  XMarkIcon, ClockIcon, MapPinIcon, UserIcon, PlusIcon, 
+  ClipboardIcon, ArrowPathIcon, TrashIcon, PencilIcon 
+} from '@heroicons/react/24/outline';
 
-// Configurations statiques
+// Configuration des types d'événements avec leurs règles de chevauchement
 const eventTypes = [
   { 
     value: 'show', 
     label: 'Spectacle', 
-    color: '#8B0000', 
+    color: '#800000', 
     canOverlapWith: ['permanence', 'ticketing', 'régie'] 
   },
   { 
@@ -52,11 +55,12 @@ const eventTypes = [
   }
 ];
 
+// Nouvelles couleurs pour les statuts de spectacles
 const showStatusOptions = [
-  { value: 'provisional', label: 'Provisoire', color: '#FF9800' },  // Orange
-  { value: 'confirmed', label: 'Confirmé', color: '#00C853' },      // Vert vif
-  { value: 'cancelled', label: 'Annulé', color: '#D32F2F' },        // Rouge vif
-  { value: 'ticketsOpen', label: 'Billetterie ouverte', color: '#0288D1' } // Bleu ciel
+  { value: 'provisional', label: 'Provisoire', color: '#FFA500' },  // Orange plus vif
+  { value: 'confirmed', label: 'Confirmé', color: '#4CAF50' },      // Vert plus visible
+  { value: 'cancelled', label: 'Annulé', color: '#F44336' },        // Rouge plus clair
+  { value: 'ticketsOpen', label: 'Billetterie ouverte', color: '#2196F3' } // Bleu plus vif
 ];
 
 // Fonction utilitaire pour obtenir le label d'un type d'événement
@@ -103,6 +107,17 @@ const Calendar = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  // Fonction utilitaire pour formater les dates pour les inputs
+  const formatDateForInput = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   // Récupération des données
@@ -229,11 +244,8 @@ const Calendar = () => {
     // Créer la date de début à partir de la date cliquée
     const clickedDate = new Date(info.dateStr || info.start);
     
-    // Calculer la durée de l'événement original
-    const originalDuration = clipboardEvent.duration;
-    
     // Calculer la date de fin en fonction de la durée de l'événement original
-    const endDate = new Date(clickedDate.getTime() + originalDuration);
+    const endDate = new Date(clickedDate.getTime() + clipboardEvent.duration);
     
     // Trouver le type d'événement et sa couleur
     const eventTypeObj = eventTypes.find(type => type.value === clipboardEvent.type);
@@ -256,9 +268,7 @@ const Calendar = () => {
       await api.post('/events', eventData);
       setSuccess('Événement collé avec succès');
       fetchEvents();
-      setTimeout(() => {
-        setSuccess('');
-      }, 3000);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       setError(error.response?.data?.message || 'Erreur lors de la création de l\'événement');
     }
@@ -284,16 +294,6 @@ const Calendar = () => {
       // Si c'est un clic sur une date, définir une durée par défaut de 2 heures
       endDate.setHours(startDate.getHours() + 2);
     }
-    
-    const formatDateForInput = (date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      
-      return `${year}-${month}-${day}T${hours}:${minutes}`;
-    };
 
     setNewEvent({
       title: '',
@@ -316,38 +316,23 @@ const Calendar = () => {
     setNewEvent(prev => ({ ...prev, [name]: value }));
   };
   
-  // Correction de la fonction handleEdit pour préserver les horaires exacts
+  // Fonction pour éditer un événement existant
   const handleEdit = () => {
     if (!currentEvent) return;
     
-    // Préserver les dates exactes sans conversion qui pourrait altérer les minutes/secondes
-    const startDate = currentEvent.start;
-    const endDate = currentEvent.end;
-    
-    // Format the date directly from the Date object without timezone conversion
-    // Use the HTML datetime-local input format (YYYY-MM-DDThh:mm)
-    const formatDateForInput = (date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      
-      return `${year}-${month}-${day}T${hours}:${minutes}`;
-    };
-    
     setNewEvent({
-      title: '',
-      start: formatDateForInput(startDate),
-      end: formatDateForInput(endDate),
-      roomId: rooms.length > 0 ? rooms[0].id.toString() : '',
-      type: 'show',
-      showStatus: 'provisional',
-      description: '',
-      color: eventTypes.find(type => type.value === 'show')?.color || '#800000'
+      id: currentEvent.id,
+      title: currentEvent.title,
+      start: formatDateForInput(currentEvent.start),
+      end: formatDateForInput(currentEvent.end),
+      roomId: currentEvent.extendedProps.room?.id || (rooms.length > 0 ? rooms[0].id.toString() : ''),
+      type: currentEvent.extendedProps.type || 'show',
+      showStatus: currentEvent.extendedProps.showStatus || 'provisional',
+      description: currentEvent.extendedProps.description || '',
+      color: currentEvent.color
     });
     
-    setModalType('add');
+    setModalType('edit');
     setShowModal(true);
   };
   
@@ -363,27 +348,26 @@ const Calendar = () => {
       setSuccess('Événement supprimé avec succès');
       setShowModal(false);
       fetchEvents();
-      setTimeout(() => {
-        setSuccess('');
-      }, 3000);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       setError(error.response?.data?.message || 'Erreur lors de la suppression de l\'événement');
     }
   };
   
-  // Ajoutez cette fonction pour vérifier si un événement peut chevaucher d'autres événements
+  // Fonction améliorée pour vérifier si un événement peut chevaucher d'autres événements
   const canEventsOverlap = (movingEventType, stillEventType) => {
-    // Find the event type configuration for the moving event
+    // Trouver la configuration du type d'événement en mouvement
     const movingEventConfig = eventTypes.find(type => type.value === movingEventType);
     
-    // If we can't find the configuration, don't allow overlap
+    // Si on ne trouve pas la configuration, ne pas autoriser le chevauchement
     if (!movingEventConfig) return false;
     
-    // Check if the still event's type is in the list of types that the moving event can overlap with
+    // Vérifier si le type d'événement immobile est dans la liste des types avec lesquels
+    // l'événement en mouvement peut se chevaucher
     return movingEventConfig.canOverlapWith.includes(stillEventType);
   };
   
-  // Modifiez la fonction handleSubmit pour vérifier les chevauchements avant de créer/modifier un événement
+  // Fonction de soumission du formulaire améliorée
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -420,6 +404,7 @@ const Calendar = () => {
           
           // Si chevauchement, vérifier si les types d'événements peuvent se chevaucher
           if (isOverlapping) {
+            // Vérifier si les types peuvent se chevaucher
             return !canEventsOverlap(newEvent.type, event.type);
           }
           
@@ -437,21 +422,29 @@ const Calendar = () => {
         }
       }
       
+      // Préparer les données de l'événement
       const eventData = {
         title: newEvent.title,
-        start: newEvent.start,
-        end: newEvent.end,
+        start: new Date(newEvent.start).toISOString(),
+        end: new Date(newEvent.end).toISOString(),
         roomId: newEvent.roomId,
         type: newEvent.type,
         description: newEvent.description,
-        color: newEvent.color,
         creatorId: user.id
       };
       
+      // Ajouter le statut du spectacle si c'est un spectacle
       if (newEvent.type === 'show') {
+        const statusOption = showStatusOptions.find(option => option.value === newEvent.showStatus);
         eventData.showStatus = newEvent.showStatus;
+        eventData.color = statusOption ? statusOption.color : eventTypes.find(t => t.value === 'show').color;
+      } else {
+        // Utiliser la couleur du type d'événement
+        const typeOption = eventTypes.find(t => t.value === newEvent.type);
+        eventData.color = typeOption ? typeOption.color : '#800000';
       }
       
+      // Créer ou mettre à jour l'événement
       if (modalType === 'add') {
         await api.post('/events', eventData);
         setSuccess('Événement créé avec succès');
@@ -462,9 +455,7 @@ const Calendar = () => {
       
       setShowModal(false);
       fetchEvents();
-      setTimeout(() => {
-        setSuccess('');
-      }, 3000);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       setError(error.response?.data?.message || 'Erreur lors de la création/modification de l\'événement');
     }
@@ -484,16 +475,10 @@ const Calendar = () => {
             </div>
           )}
           <button
-            onClick={() => {
-              setSelectedTimeInfo({
-                start: new Date(),
-                end: new Date(new Date().getTime() + 2 * 60 * 60 * 1000) // +2 heures
-              });
-              handleNewEvent({
-                start: new Date(),
-                end: new Date(new Date().getTime() + 2 * 60 * 60 * 1000)
-              });
-            }}
+            onClick={() => handleNewEvent({
+              start: new Date(),
+              end: new Date(new Date().getTime() + 2 * 60 * 60 * 1000)
+            })}
             className="bg-gold hover:bg-gold/90 text-primary px-4 py-2 rounded-md flex items-center shadow-sm transition-colors"
           >
             <PlusIcon className="h-5 w-5 mr-1" />
@@ -646,6 +631,11 @@ const Calendar = () => {
                     style={{ backgroundColor: currentEvent.color }}
                   >
                     {getEventTypeLabel(currentEvent.extendedProps.type)}
+                    {currentEvent.extendedProps.type === 'show' && currentEvent.extendedProps.showStatus && (
+                      <span className="ml-2">
+                        ({showStatusOptions.find(s => s.value === currentEvent.extendedProps.showStatus)?.label || currentEvent.extendedProps.showStatus})
+                      </span>
+                    )}
                   </span>
                 </div>
                 
@@ -681,25 +671,26 @@ const Calendar = () => {
                   </div>
                 </div>
                 
-                {/* Statut du spectacle (si applicable) */}
+                {/* Description */}
+                {currentEvent.extendedProps.description && (
+                  <div className="mb-6">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Description</h4>
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">{currentEvent.extendedProps.description}</p>
+                  </div>
+                )}
+                
+                {/* Actions pour les spectacles */}
                 {currentEvent.extendedProps.type === 'show' && (
-                  <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-                    <p className="text-sm font-medium text-gray-700 mb-3">Statut du spectacle:</p>
+                  <div className="mb-6">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Statut du spectacle</h4>
                     <div className="flex flex-wrap gap-2">
                       {showStatusOptions.map(status => (
                         <button
                           key={status.value}
                           onClick={() => handleConfirmShow(status.value)}
-                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                            currentEvent.extendedProps.showStatus === status.value
-                              ? 'text-white shadow-sm'
-                              : 'bg-opacity-10 text-gray-700 hover:bg-opacity-20'
-                          }`}
-                          style={{ 
-                            backgroundColor: currentEvent.extendedProps.showStatus === status.value 
-                              ? status.color 
-                              : `${status.color}22` 
-                          }}
+                          className="px-3 py-1 rounded-md text-white text-xs font-medium shadow-sm transition-colors"
+                          style={{ backgroundColor: status.color }}
+                          disabled={currentEvent.extendedProps.showStatus === status.value}
                         >
                           {status.label}
                         </button>
@@ -708,217 +699,168 @@ const Calendar = () => {
                   </div>
                 )}
                 
-                {/* Description (si disponible) */}
-                {currentEvent.extendedProps.description && (
-                  <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-                    <p className="text-xs text-gray-500 uppercase font-semibold mb-2">Description</p>
-                    <p className="text-sm text-gray-600 whitespace-pre-line">
-                      {currentEvent.extendedProps.description}
-                    </p>
-                  </div>
-                )}
-                
                 {/* Actions */}
                 <div className="flex justify-between mt-6">
-                  <div className="space-x-2">
+                  <div>
+                    <button
+                      onClick={handleDelete}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center shadow-sm transition-colors"
+                    >
+                      <TrashIcon className="h-5 w-5 mr-1" />
+                      Supprimer
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
                     <button
                       onClick={handleCopyEvent}
-                      className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors shadow-sm"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center shadow-sm transition-colors"
                     >
+                      <ClipboardIcon className="h-5 w-5 mr-1" />
                       Copier
                     </button>
                     <button
                       onClick={handleEdit}
-                      className="px-4 py-2 bg-gold text-primary rounded-md hover:bg-gold/90 transition-colors shadow-sm"
+                      className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md flex items-center shadow-sm transition-colors"
                     >
+                      <PencilIcon className="h-5 w-5 mr-1" />
                       Modifier
                     </button>
                   </div>
-                  <button
-                    onClick={handleDelete}
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors shadow-sm"
-                  >
-                    Supprimer
-                  </button>
                 </div>
               </div>
             )}
             
             {/* Formulaire d'ajout/modification d'événement */}
             {(modalType === 'add' || modalType === 'edit') && (
-              <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                {/* En-tête du formulaire avec couleur basée sur le type d'événement */}
-                <div 
-                  className="p-4 rounded-lg mb-6 text-white"
-                  style={{ 
-                    backgroundColor: newEvent.color || eventTypes[0].color,
-                    transition: 'background-color 0.3s ease'
-                  }}
-                >
-                  <h3 className="text-xl font-semibold">
-                    {modalType === 'add' ? 'Nouvel événement' : 'Modifier l\'événement'}
-                  </h3>
-                  <p className="text-sm opacity-90 mt-1">
-                    {newEvent.type && getEventTypeLabel(newEvent.type)}
-                    {newEvent.type === 'show' && newEvent.showStatus && 
-                      ` - ${showStatusOptions.find(s => s.value === newEvent.showStatus)?.label || ''}`
-                    }
-                  </p>
-                </div>
-            
-                {/* Titre */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Titre</label>
-                  <input
-                    type="text"
-                    name="title"
-                    value={newEvent.title}
-                    onChange={handleInputChange}
-                    className="form-input w-full border-2 border-primary/20 focus:border-primary/60 rounded-lg px-4 py-3 transition-all"
-                    placeholder="Nom de l'événement"
-                    required
-                  />
-                </div>
-            
-                {/* Type d'événement et salle */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <form onSubmit={handleSubmit} className="p-6">
+                <div className="grid grid-cols-1 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Type d'événement</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {eventTypes.map(type => (
-                        <div 
-                          key={type.value}
-                          onClick={() => {
-                            setNewEvent({
-                              ...newEvent,
-                              type: type.value,
-                              color: type.color
-                            });
-                          }}
-                          className={`cursor-pointer p-3 rounded-lg flex items-center transition-all ${
-                            newEvent.type === type.value 
-                              ? 'ring-2 ring-offset-2 shadow-md' 
-                              : 'opacity-70 hover:opacity-100'
-                          }`}
-                          style={{ 
-                            backgroundColor: `${type.color}22`,
-                            borderLeft: `4px solid ${type.color}`,
-                            color: type.color,
-                            ringColor: type.color
-                          }}
-                        >
-                          <span className="text-sm font-medium">{type.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <input type="hidden" name="type" value={newEvent.type} />
-                  </div>
-            
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Salle</label>
-                    <select
-                      name="roomId"
-                      value={newEvent.roomId}
-                      onChange={handleInputChange}
-                      className="form-input w-full border-2 border-primary/20 focus:border-primary/60 rounded-lg px-4 py-3 transition-all"
-                      required
-                    >
-                      <option value="">Sélectionner une salle</option>
-                      {rooms.map(room => (
-                        <option key={room.id} value={room.id}>{room.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-            
-                {/* Dates de début et de fin */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Début</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Titre de l'événement*
+                    </label>
                     <input
-                      type="datetime-local"
-                      name="start"
-                      value={newEvent.start}
+                      type="text"
+                      name="title"
+                      value={newEvent.title}
                       onChange={handleInputChange}
-                      className="form-input w-full border-2 border-primary/20 focus:border-primary/60 rounded-lg px-4 py-3 transition-all"
                       required
+                      className="form-input w-full rounded-md"
+                      placeholder="Titre de l'événement"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Fin</label>
-                    <input
-                      type="datetime-local"
-                      name="end"
-                      value={newEvent.end}
-                      onChange={handleInputChange}
-                      className="form-input w-full border-2 border-primary/20 focus:border-primary/60 rounded-lg px-4 py-3 transition-all"
-                      required
-                    />
-                  </div>
-                </div>
-            
-                {/* Statut du spectacle (si applicable) */}
-                {newEvent.type === 'show' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Statut du spectacle</label>
-                    <div className="flex flex-wrap gap-2">
-                      {showStatusOptions.map(status => (
-                        <div
-                          key={status.value}
-                          onClick={() => {
-                            setNewEvent({
-                              ...newEvent,
-                              showStatus: status.value
-                            });
-                          }}
-                          className={`cursor-pointer px-4 py-2 rounded-md flex items-center transition-all ${
-                            newEvent.showStatus === status.value 
-                              ? 'ring-2 ring-offset-1 shadow-sm' 
-                              : 'opacity-70 hover:opacity-100'
-                          }`}
-                          style={{ 
-                            backgroundColor: newEvent.showStatus === status.value ? status.color : `${status.color}22`,
-                            color: newEvent.showStatus === status.value ? 'white' : status.color,
-                            ringColor: status.color
-                          }}
-                        >
-                          <span className="text-sm font-medium">{status.label}</span>
-                        </div>
-                      ))}
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Date et heure de début*
+                      </label>
+                      <input
+                        type="datetime-local"
+                        name="start"
+                        value={newEvent.start}
+                        onChange={handleInputChange}
+                        required
+                        className="form-input w-full rounded-md"
+                      />
                     </div>
-                    <input type="hidden" name="showStatus" value={newEvent.showStatus} />
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Date et heure de fin*
+                      </label>
+                      <input
+                        type="datetime-local"
+                        name="end"
+                        value={newEvent.end}
+                        onChange={handleInputChange}
+                        required
+                        className="form-input w-full rounded-md"
+                      />
+                    </div>
                   </div>
-                )}
-            
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                  <textarea
-                    name="description"
-                    value={newEvent.description}
-                    onChange={handleInputChange}
-                    className="form-input w-full border-2 border-primary/20 focus:border-primary/60 rounded-lg px-4 py-3 transition-all"
-                    rows="4"
-                    placeholder="Détails supplémentaires sur l'événement..."
-                  ></textarea>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Salle*
+                      </label>
+                      <select
+                        name="roomId"
+                        value={newEvent.roomId}
+                        onChange={handleInputChange}
+                        required
+                        className="form-select w-full rounded-md"
+                      >
+                        <option value="">Sélectionner une salle</option>
+                        {rooms.map(room => (
+                          <option key={room.id} value={room.id}>{room.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Type d'événement*
+                      </label>
+                      <select
+                        name="type"
+                        value={newEvent.type}
+                        onChange={handleInputChange}
+                        required
+                        className="form-select w-full rounded-md"
+                      >
+                        {eventTypes.map(type => (
+                          <option key={type.value} value={type.value}>{type.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  
+                  {newEvent.type === 'show' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Statut du spectacle
+                      </label>
+                      <select
+                        name="showStatus"
+                        value={newEvent.showStatus}
+                        onChange={handleInputChange}
+                        className="form-select w-full rounded-md"
+                      >
+                        {showStatusOptions.map(status => (
+                          <option key={status.value} value={status.value}>{status.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Description
+                    </label>
+                    <textarea
+                      name="description"
+                      value={newEvent.description}
+                      onChange={handleInputChange}
+                      rows="4"
+                      className="form-textarea w-full rounded-md"
+                      placeholder="Description de l'événement"
+                    ></textarea>
+                  </div>
                 </div>
-            
-                {/* Boutons d'action */}
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+                
+                <div className="mt-6 flex justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className="px-4 py-2 bg-gray-100 text-gray-800 rounded-md hover:bg-gray-200 transition-colors flex items-center"
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-colors"
                   >
-                    <XMarkIcon className="h-5 w-5 mr-1" />
                     Annuler
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors shadow-md flex items-center"
-                    style={{ backgroundColor: newEvent.color }}
+                    className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-md shadow-sm transition-colors"
                   >
-                    <PlusIcon className="h-5 w-5 mr-1" />
                     {modalType === 'add' ? 'Créer' : 'Mettre à jour'}
                   </button>
                 </div>
@@ -928,47 +870,47 @@ const Calendar = () => {
         </div>
       )}
       
-      {/* Dialogue de sélection pour la création d'événement */}
+      {/* Dialogue de sélection après clic sur date/heure */}
       {showSelectionDialog && selectedTimeInfo && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Que souhaitez-vous faire ?</h3>
-            
-            <div className="space-y-3">
-              <button
-                onClick={() => {
-                  setShowSelectionDialog(false);
-                  handleNewEvent(selectedTimeInfo);
-                }}
-                className="w-full flex items-center justify-between p-3 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-              >
-                <span className="font-medium">Créer un nouvel événement</span>
-                <PlusIcon className="h-5 w-5" />
-              </button>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Que souhaitez-vous faire ?
+              </h3>
               
-              {clipboardEvent && (
+              <div className="flex flex-col gap-3">
                 <button
                   onClick={() => {
                     setShowSelectionDialog(false);
-                    handlePasteEvent(selectedTimeInfo);
+                    handleNewEvent(selectedTimeInfo);
                   }}
-                  className="w-full flex items-center justify-between p-3 bg-gold/10 text-gold rounded-lg hover:bg-gold/20 transition-colors"
+                  className="w-full px-4 py-3 bg-primary hover:bg-primary/90 text-white rounded-md shadow-sm transition-colors flex items-center"
                 >
-                  <div>
-                    <span className="font-medium">Coller l'événement</span>
-                    <p className="text-sm text-gray-600 mt-1">{clipboardEvent.title}</p>
-                  </div>
-                  <DocumentIcon className="h-5 w-5" />
+                  <PlusIcon className="h-5 w-5 mr-2" />
+                  Créer un nouvel événement
                 </button>
-              )}
-              
-              <button
-                onClick={() => setShowSelectionDialog(false)}
-                className="w-full flex items-center justify-between p-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                <span className="font-medium">Annuler</span>
-                <XMarkIcon className="h-5 w-5" />
-              </button>
+                
+                {clipboardEvent && (
+                  <button
+                    onClick={() => {
+                      setShowSelectionDialog(false);
+                      handlePasteEvent(selectedTimeInfo);
+                    }}
+                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition-colors flex items-center"
+                  >
+                    <ClipboardIcon className="h-5 w-5 mr-2" />
+                    Coller l'événement ({clipboardEvent.title})
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => setShowSelectionDialog(false)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -978,54 +920,3 @@ const Calendar = () => {
 };
 
 export default Calendar;
-
-// Define the missing variables to fix the ESLint errors
-const eventData = {
-  type: 'show' // Default value
-};
-
-const handleChange = (e) => {
-  // This is just a placeholder function to fix the ESLint error
-  console.log('Event changed:', e.target.value);
-};
-
-// Now the example code will work without errors
-// Update any event type dropdown or filter
-// For example, if you have an event type selector:
-<select 
-  name="type" 
-  value={eventData.type} 
-  onChange={handleChange}
-  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
->
-  <option value="show">Spectacle</option>
-  <option value="permanence">Permanence</option>
-  <option value="ticketing">Billetterie</option>
-  <option value="régie">Régie</option> {/* Changed from "technical" to "régie" */}
-  <option value="rental">Location salle</option>
-  <option value="calage">Calage</option>
-  <option value="event">Évènement</option>
-</select>
-
-// Update any event rendering or display logic
-// For example, if you have a function that determines event colors based on type:
-const getEventColor = (eventType) => {
-  switch(eventType) {
-    case 'show':
-      return '#FF5733'; // Red color for shows
-    case 'permanence':
-      return '#33FF57'; // Green color for permanence
-    case 'ticketing':
-      return '#3357FF'; // Blue color for ticketing
-    case 'régie': // Changed from "technical" to "régie"
-      return '#F3FF33'; // Yellow color for régie
-    case 'rental':
-      return '#FF33F6'; // Pink color for rentals
-    case 'calage':
-      return '#33FFF6'; // Cyan color for calage
-    case 'event':
-      return '#FF9933'; // Orange color for events
-    default:
-      return '#CCCCCC'; // Gray color for unknown types
-  }
-};

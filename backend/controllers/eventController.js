@@ -467,14 +467,7 @@ exports.getEvent = async (req, res) => {
 // Update an event
 exports.updateEvent = async (req, res) => {
   try {
-    const event = await Event.findByPk(req.params.id, {
-      include: [
-        {
-          model: User,
-          attributes: ['id']
-        }
-      ]
-    });
+    const event = await Event.findByPk(req.params.id);
     
     if (!event) {
       return res.status(404).json({
@@ -483,36 +476,52 @@ exports.updateEvent = async (req, res) => {
       });
     }
     
-    // Check if user is authorized to update this event
-    const userIds = event.Users.map(user => user.id);
-    if (req.user.role !== 'administrateur' && !userIds.includes(req.user.id)) {
+    // Check if the user has permission to update this event
+    if (req.user.role !== 'administrateur' && event.creatorId !== req.user.id) {
       return res.status(403).json({
         status: 'error',
         message: 'Vous n\'êtes pas autorisé à modifier cet événement'
       });
     }
     
-    const { title, start, end, roomId, type, description, color } = req.body;
-    
-    // Check for conflicts (excluding this event)
-    if (start && end && roomId) {
-      const conflictingEvents = await Event.findAll({
+    // Check for overlapping events if room or time is changing
+    if (req.body.roomId || req.body.start || req.body.end) {
+      const roomId = req.body.roomId || event.roomId;
+      const start = req.body.start ? new Date(req.body.start) : event.start;
+      const end = req.body.end ? new Date(req.body.end) : event.end;
+      
+      // Find overlapping events in the same room
+      const overlappingEvents = await Event.findAll({
         where: {
-          id: {
-            [Op.ne]: req.params.id
-          },
-          roomId,
+          roomId: roomId,
+          id: { [Op.ne]: event.id }, // Exclude the current event being updated
           [Op.or]: [
             {
-              start: {
-                [Op.lt]: end
-              },
-              end: {
-                [Op.gt]: start
-              }
+              start: { [Op.lt]: end },
+              end: { [Op.gt]: start }
             }
           ]
         }
+      });
+      
+      // Check if any of the overlapping events can't overlap with this event type
+      const eventType = req.body.type || event.type;
+      const conflictingEvents = overlappingEvents.filter(e => {
+        // Define which event types can overlap
+        // This should match your frontend logic
+        const canOverlap = (type1, type2) => {
+          // Define your overlap rules here based on event types
+          // For example:
+          if (type1 === 'permanence' || type1 === 'ticketing' || type1 === 'régie') {
+            return true; // These can overlap with anything
+          }
+          if (type2 === 'permanence' || type2 === 'ticketing' || type2 === 'régie') {
+            return true; // Anything can overlap with these
+          }
+          return false; // By default, no overlap
+        };
+        
+        return !canOverlap(eventType, e.type) && !canOverlap(e.type, eventType);
       });
       
       if (conflictingEvents.length > 0) {
@@ -523,15 +532,8 @@ exports.updateEvent = async (req, res) => {
       }
     }
     
-    await event.update({
-      title,
-      start,
-      end,
-      roomId,
-      type,
-      description,
-      color
-    });
+    // Update the event
+    await event.update(req.body);
     
     res.status(200).json({
       status: 'success',
@@ -540,7 +542,7 @@ exports.updateEvent = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(400).json({
+    res.status(500).json({
       status: 'error',
       message: error.message
     });
