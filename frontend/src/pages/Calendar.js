@@ -57,7 +57,7 @@ const eventTypes = [
 
 // Nouvelles couleurs pour les statuts de spectacles
 const showStatusOptions = [
-  { value: 'provisional', label: 'Provisoire', color: '#FFA500' },  // Orange plus vif
+  { value: 'provisional', label: 'Provisoire', color: '#FF9800' },  // Orange plus doux
   { value: 'confirmed', label: 'Confirmé', color: '#4CAF50' },      // Vert plus visible
   { value: 'cancelled', label: 'Annulé', color: '#F44336' },        // Rouge plus clair
   { value: 'ticketsOpen', label: 'Billetterie ouverte', color: '#2196F3' } // Bleu plus vif
@@ -92,8 +92,10 @@ const Calendar = () => {
     end: '',
     roomId: '',
     type: 'show',
+    coRealizationPercentage: '',
     showStatus: 'provisional',
     description: '',
+
     color: eventTypes[0].color
   });
 
@@ -156,7 +158,8 @@ const Calendar = () => {
           description: event.description,
           room: event.Room,
           creator: event.Creator,
-          showStatus: event.showStatus
+          showStatus: event.showStatus,
+          coRealizationPercentage: event.coRealizationPercentage // Ajout de cette ligne
         }
       }));
       
@@ -312,8 +315,20 @@ const Calendar = () => {
 
   // Gestion du formulaire
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setNewEvent(prev => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    
+    // Convertir les valeurs numériques
+    if (type === 'number') {
+      setNewEvent(prev => ({
+        ...prev,
+        [name]: value === '' ? '' : Number(value)
+      }));
+    } else {
+      setNewEvent(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
   
   // Fonction pour éditer un événement existant
@@ -329,6 +344,7 @@ const Calendar = () => {
       type: currentEvent.extendedProps.type || 'show',
       showStatus: currentEvent.extendedProps.showStatus || 'provisional',
       description: currentEvent.extendedProps.description || '',
+      coRealizationPercentage: currentEvent.extendedProps.coRealizationPercentage || '', // Ajout de cette ligne
       color: currentEvent.color
     });
     
@@ -430,7 +446,8 @@ const Calendar = () => {
         roomId: newEvent.roomId,
         type: newEvent.type,
         description: newEvent.description,
-        creatorId: user.id
+        creatorId: user.id,
+        coRealizationPercentage: newEvent.coRealizationPercentage // Ajout du pourcentage de co-réalisation
       };
       
       // Ajouter le statut du spectacle si c'est un spectacle
@@ -663,7 +680,7 @@ const Calendar = () => {
                   <div className="flex items-center">
                     <UserIcon className="h-5 w-5 text-primary mr-3" />
                     <div>
-                      <p className="text-xs text-gray-500 uppercase font-semibold">Créateur</p>
+                      <p className="text-xs text-gray-5-000 uppercase font-semibold">Créateur</p>
                       <p className="text-sm text-gray-700">
                         {currentEvent.extendedProps.creator?.firstName} {currentEvent.extendedProps.creator?.lastName}
                       </p>
@@ -735,7 +752,7 @@ const Calendar = () => {
               <form onSubmit={handleSubmit} className="p-6">
                 <div className="grid grid-cols-1 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-primary mb-1">
                       Titre de l'événement*
                     </label>
                     <input
@@ -744,14 +761,14 @@ const Calendar = () => {
                       value={newEvent.title}
                       onChange={handleInputChange}
                       required
-                      className="form-input w-full rounded-md"
+                      className="form-input w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
                       placeholder="Titre de l'événement"
                     />
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-primary mb-1">
                         Date et heure de début*
                       </label>
                       <input
@@ -760,12 +777,12 @@ const Calendar = () => {
                         value={newEvent.start}
                         onChange={handleInputChange}
                         required
-                        className="form-input w-full rounded-md"
+                        className="form-input w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
                       />
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-primary mb-1">
                         Date et heure de fin*
                       </label>
                       <input
@@ -774,68 +791,118 @@ const Calendar = () => {
                         value={newEvent.end}
                         onChange={handleInputChange}
                         required
-                        className="form-input w-full rounded-md"
+                        className="form-input w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
                       />
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Salle*
+                      <label className="block text-sm font-medium text-primary mb-1">
+                        Type d'événement*
                       </label>
-                      <select
-                        name="roomId"
-                        value={newEvent.roomId}
-                        onChange={handleInputChange}
-                        required
-                        className="form-select w-full rounded-md"
-                      >
-                        <option value="">Sélectionner une salle</option>
-                        {rooms.map(room => (
-                          <option key={room.id} value={room.id}>{room.name}</option>
+                      <div className="grid grid-cols-2 gap-2">
+                        {eventTypes.map(type => (
+                          <div 
+                            key={type.value}
+                            onClick={() => setNewEvent(prev => ({ ...prev, type: type.value }))}
+                            className={`cursor-pointer p-3 rounded-lg border-2 transition-all flex items-center ${
+                              newEvent.type === type.value 
+                                ? 'border-primary bg-primary/5' 
+                                : 'border-gray-200 hover:border-primary/30'
+                            }`}
+                          >
+                            <div 
+                              className="w-4 h-4 rounded-full mr-2" 
+                              style={{ backgroundColor: type.color }}
+                            ></div>
+                            <span className={`text-sm ${newEvent.type === type.value ? 'font-medium' : ''}`}>
+                              {type.label}
+                            </span>
+                          </div>
                         ))}
-                      </select>
+                      </div>
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Type d'événement*
+                      <label className="block text-sm font-medium text-primary mb-1">
+                        Salle*
                       </label>
-                      <select
-                        name="type"
-                        value={newEvent.type}
-                        onChange={handleInputChange}
-                        required
-                        className="form-select w-full rounded-md"
-                      >
-                        {eventTypes.map(type => (
-                          <option key={type.value} value={type.value}>{type.label}</option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <select
+                          name="roomId"
+                          value={newEvent.roomId}
+                          onChange={handleInputChange}
+                          required
+                          className="form-select w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all appearance-none pl-4 pr-10 py-2"
+                        >
+                          <option value="">Sélectionner une salle</option>
+                          {rooms.map(room => (
+                            <option key={room.id} value={room.id}>{room.name}</option>
+                          ))}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                          <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                            <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                          </svg>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   
                   {newEvent.type === 'show' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Statut du spectacle
-                      </label>
-                      <select
-                        name="showStatus"
-                        value={newEvent.showStatus}
-                        onChange={handleInputChange}
-                        className="form-select w-full rounded-md"
-                      >
-                        {showStatusOptions.map(status => (
-                          <option key={status.value} value={status.value}>{status.label}</option>
-                        ))}
-                      </select>
+                    <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
+                      <h3 className="text-primary font-medium mb-3">Options du spectacle</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-primary mb-1">
+                            Statut du spectacle
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {showStatusOptions.map(status => (
+                              <div 
+                                key={status.value}
+                                onClick={() => setNewEvent(prev => ({ ...prev, showStatus: status.value }))}
+                                className={`cursor-pointer p-3 rounded-lg border-2 transition-all flex flex-col items-center ${
+                                  newEvent.showStatus === status.value 
+                                    ? 'border-primary shadow-md' 
+                                    : 'border-gray-200 hover:border-primary/30'
+                                }`}
+                                style={{ backgroundColor: newEvent.showStatus === status.value ? `${status.color}20` : '' }}
+                              >
+                                <div 
+                                  className="w-4 h-4 rounded-full mb-1" 
+                                  style={{ backgroundColor: status.color }}
+                                ></div>
+                                <span className={`text-sm text-center ${newEvent.showStatus === status.value ? 'font-medium' : ''}`}>
+                                  {status.label}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-primary mb-1">
+                            Co-réalisation (%)
+                          </label>
+                          <input
+                            type="number"
+                            name="coRealizationPercentage"
+                            value={newEvent.coRealizationPercentage || ''}
+                            onChange={handleInputChange}
+                            min="0"
+                            max="100"
+                            className="form-input w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
+                            placeholder="Pourcentage de co-réalisation"
+                          />
+                        </div>
+                      </div>
                     </div>
                   )}
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-primary mb-1">
                       Description
                     </label>
                     <textarea
@@ -843,7 +910,7 @@ const Calendar = () => {
                       value={newEvent.description}
                       onChange={handleInputChange}
                       rows="4"
-                      className="form-textarea w-full rounded-md"
+                      className="form-textarea w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
                       placeholder="Description de l'événement"
                     ></textarea>
                   </div>

@@ -25,7 +25,7 @@ const Event = sequelize.define('Event', {
   },
   // Add show status field
   showStatus: {
-    type: DataTypes.ENUM('provisional', 'confirmed', 'ticketsOpen'),
+    type: DataTypes.ENUM('provisional', 'confirmed', 'ticketsOpen', 'cancelled'),
     defaultValue: 'provisional',
     allowNull: true
   },
@@ -36,6 +36,15 @@ const Event = sequelize.define('Event', {
   color: {
     type: DataTypes.STRING,
     defaultValue: '#4CAF50'
+  },
+  // Ajout du champ pour la co-réalisation
+  coRealizationPercentage: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    validate: {
+      min: 0,
+      max: 100
+    }
   }
 });
 
@@ -43,18 +52,12 @@ const Event = sequelize.define('Event', {
 Event.belongsTo(Room, { foreignKey: 'roomId' });
 Room.hasMany(Event, { foreignKey: 'roomId' });
 
-// Many-to-many relationship with User (for assigned users)
+// Creator relationship
+Event.belongsTo(User, { foreignKey: 'creatorId', as: 'Creator' });
+User.hasMany(Event, { foreignKey: 'creatorId' });
+
+// Many-to-many relationship with users (for assignments)
 Event.belongsToMany(User, { through: 'EventUsers' });
 User.belongsToMany(Event, { through: 'EventUsers' });
 
-// Creator relationship (one-to-many)
-Event.belongsTo(User, { as: 'Creator', foreignKey: 'creatorId' });
-User.hasMany(Event, { as: 'CreatedEvents', foreignKey: 'creatorId' });
-
-// Add this association to your Event model
-const EventPdf = require('./eventPdfModel');
-
-// After defining the Event model, add:
-Event.hasMany(EventPdf, { foreignKey: 'eventId', as: 'pdfs' });
-EventPdf.belongsTo(Event, { foreignKey: 'eventId' });
 module.exports = Event;

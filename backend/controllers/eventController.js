@@ -464,6 +464,51 @@ exports.getEvent = async (req, res) => {
   }
 };
 
+// Create event
+exports.createEvent = async (req, res) => {
+  try {
+    // Extract event data from request body
+    const { 
+      title, 
+      start, 
+      end, 
+      roomId, 
+      type, 
+      description, 
+      color, 
+      showStatus,
+      coRealizationPercentage, // Ajout du pourcentage de co-réalisation
+      creatorId 
+    } = req.body;
+    
+    // Create the event
+    const event = await Event.create({
+      title,
+      start,
+      end,
+      roomId,
+      type,
+      description,
+      color,
+      showStatus,
+      coRealizationPercentage, // Ajout du pourcentage de co-réalisation
+      creatorId: creatorId || req.user.id
+    });
+    
+    res.status(201).json({
+      status: 'success',
+      data: {
+        event
+      }
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
 // Update an event
 exports.updateEvent = async (req, res) => {
   try {
