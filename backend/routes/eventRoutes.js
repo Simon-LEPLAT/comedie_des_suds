@@ -27,7 +27,7 @@ const upload = multer({
 
 const router = express.Router();
 
-// Existing routes
+// Event routes
 router
   .route('/')
   .get(protect, eventController.getAllEvents)
@@ -37,19 +37,16 @@ router
   .route('/:id')
   .get(protect, eventController.getEvent)
   .patch(protect, eventController.updateEvent)
-  .delete(protect, restrictTo('administrateur'), eventController.deleteEvent);
+  .delete(protect, eventController.deleteEvent);
 
-// New routes for theater play validation and PDF management
-router.get('/validate-play', protect, eventController.validateTheaterPlay);
-
-router.post('/upload-pdfs', protect, upload.array('pdfs', 10), eventController.uploadPdfs);
-
-router.delete('/:eventId/pdfs/:pdfId', protect, eventController.deletePdf);
-
-// Add these routes after your existing event routes
+// PDF routes
 router
-  .route('/:eventId/users')
-  .post(protect, eventController.addUsersToEvent)
-  .delete(protect, eventController.removeUsersFromEvent);
+  .route('/:id/pdfs')
+  .get(protect, eventController.getEventPdfs)
+  .post(protect, upload.single('pdf'), eventController.uploadEventPdf);
+
+router
+  .route('/:id/pdfs/:pdfId')
+  .delete(protect, eventController.deleteEventPdf);
 
 module.exports = router;

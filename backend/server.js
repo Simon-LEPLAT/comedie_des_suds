@@ -6,6 +6,7 @@ const userRoutes = require('./routes/userRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const path = require('path'); // Add this line to import the path module
+require('./models/associations');  // Add this line before sequelize.sync()
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -25,8 +26,9 @@ async function startServer() {
     await sequelize.authenticate();
     console.log('Connected to database');
     
-    // Changed from force: true to alter: true to preserve data
-    await sequelize.sync({ alter: true });
+    // Change the sync option to avoid altering tables automatically
+    // This will prevent the "Too many keys" error
+    await sequelize.sync({ alter: false });
     console.log('Database synchronized');
     
     app.listen(PORT, () => {

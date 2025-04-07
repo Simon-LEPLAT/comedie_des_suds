@@ -15,7 +15,10 @@ import {
   UserIcon, 
   ClipboardIcon,
   CheckIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  DocumentIcon,
+  ArrowRightIcon,
+  ArrowLeftIcon
 } from '@heroicons/react/24/outline';
 
 const Calendar = () => {
@@ -32,6 +35,12 @@ const Calendar = () => {
   const [roomFilter, setRoomFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [showAllEvents, setShowAllEvents] = useState(true);
+
+    // États pour les PDF
+    const [showPdfSection, setShowPdfSection] = useState(false);
+    const [eventPdfs, setEventPdfs] = useState([]);
+    const [pdfFile, setPdfFile] = useState(null);
+    const [uploadingPdf, setUploadingPdf] = useState(false);
   
   // États pour le modal
   const [showModal, setShowModal] = useState(false);
@@ -47,9 +56,11 @@ const Calendar = () => {
     description: '',
     coRealizationPercentage: '',
     color: '',
-    assignedUsers: []
+    assignedUsers: [],
+    ticketingLocation: 'online', // Add this new field
+    hasDecor: false,
+    decorDetails: ''
   });
-  
   // États pour la sélection d'événement
   const [showSelectionDialog, setShowSelectionDialog] = useState(false);
   const [selectedTimeInfo, setSelectedTimeInfo] = useState(null);
@@ -76,7 +87,6 @@ const Calendar = () => {
   const showStatusOptions = [
     { value: 'confirmed', label: 'Confirmé', color: '#008000' },
     { value: 'provisional', label: 'Provisoire', color: '#FFA500' },
-    { value: 'canceled', label: 'Annulé', color: '#FF0000' },
     { value: 'ticketsOpen', label: 'Billetterie ouverte', color: '#0000FF' }
   ];
   
@@ -108,7 +118,10 @@ const Calendar = () => {
           creator: event.Creator,
           users: event.Users,
           showStatus: event.showStatus,
-          coRealizationPercentage: event.coRealizationPercentage
+          coRealizationPercentage: event.coRealizationPercentage,
+          ticketingLocation: event.ticketingLocation,
+          hasDecor: event.hasDecor,
+          decorDetails: event.decorDetails,
         }
       }));
       
@@ -137,6 +150,15 @@ const Calendar = () => {
       setError(error.response?.data?.message || 'Erreur lors de la récupération des utilisateurs');
     }
   }, [api]);
+
+  const fetchEventPdfs = async (eventId) => {
+    try {
+      const response = await api.get(`/events/${eventId}/pdfs`);
+      setEventPdfs(response.data.data.pdfs || []);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Erreur lors de la récupération des PDF');
+    }
+  };
   
   // Effet pour charger les données initiales
   useEffect(() => {
@@ -272,6 +294,7 @@ const Calendar = () => {
     });
     setModalType('view');
     setShowModal(true);
+    setShowPdfSection(false); // Reset PDF section when opening event
   }, []);
 
   // Fonction pour gérer la sélection d'utilisateurs
@@ -432,19 +455,126 @@ const Calendar = () => {
         return;
       }
     }
+
+    const handlePdfUpload = async () => {
+      if (!pdfFile) {
+        setError('Veuillez sélectionner un fichier PDF');
+        return;
+      }
+      
+      const eventId = currentEvent?.id || newEvent.id;
+      if (!eventId) return;
+      
+      try {
+        setUploadingPdf(true);
+        setError('');
+        
+        const formData = new FormData();
+        formData.append('pdf', pdfFile);
+        
+        await api.post(`/events/${eventId}/pdfs`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        // Refresh PDF list
+        await fetchEventPdfs(eventId);
+        setPdfFile(null);
+        setSuccess('PDF ajouté avec succès');
+        
+        // Reset file input
+        const fileInput = document.getElementById('pdf-upload');
+        if (fileInput) fileInput.value = '';
+      } catch (error) {
+        setError(error.response?.data?.message || 'Erreur lors de l\'upload du PDF');
+      } finally {
+        setUploadingPdf(false);
+      }
+    };
+    
+    // Fonction pour gérer le changement de fichier PDF
+const handleDeletePdf = async (pdfId) => {
+  if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce PDF ?')) {
+    return;
+  }
+  
+  const eventId = currentEvent?.id || newEvent.id;
+  if (!eventId) return;
+  
+  try {
+    await api.delete(`/events/${eventId}/pdfs/${pdfId}`);
+    
+    // Refresh PDF list
+    await fetchEventPdfs(eventId);
+    setSuccess('PDF supprimé avec succès');
+  } catch (error) {
+    setError(error.response?.data?.message || 'Erreur lors de la suppression du PDF');
+  }
+};
+
+// Function to handle PDF file change
+const handlePdfFileChange = (e) => {
+  const file = e.target.files[0];
+  if (file && file.type !== 'application/pdf') {
+    setError('Seuls les fichiers PDF sont autorisés');
+    e.target.value = '';
+    return;
+  }
+  
+  if (file && file.size > 10 * 1024 * 1024) {
+    setError('La taille du fichier ne doit pas dépasser 10 Mo');
+    e.target.value = '';
+    return;
+  }
+  
+  setPdfFile(file);
+  setError('');
+};
+
+// Function to toggle PDF section
+const togglePdfSection = async () => {
+  const newState = !showPdfSection;
+  setShowPdfSection(newState);
+  
+  if (newState && currentEvent?.id) {
+    await fetchEventPdfs(currentEvent.id);
+  }
+};
     
     // Préparer les données de l'événement
     const eventData = {
-      title: clipboardEvent.title,
-      start: clickedDate.toISOString(),
-      end: endDate.toISOString(),
-      roomId: clipboardEvent.roomId,
-      type: clipboardEvent.type || 'show',
-      showStatus: clipboardEvent.showStatus || 'provisional',
-      description: clipboardEvent.description || '',
-      color: eventColor,
-      assignedUsers: clipboardEvent.assignedUsers || [] // Include assigned users when pasting
+      title: newEvent.title,
+      start: new Date(newEvent.start).toISOString(),
+      end: new Date(newEvent.end).toISOString(),
+      roomId: newEvent.roomId,
+      type: newEvent.type,
+      description: newEvent.description,
+      creatorId: user.id,
+      assignedUsers: newEvent.assignedUsers,
+      // Include all form fields
+      ticketingLocation: newEvent.ticketingLocation || '',
+      hasDecor: newEvent.hasDecor || false,
+      decorDetails: newEvent.decorDetails || '',
+      // Include show-specific fields if applicable
+      ...(newEvent.type === 'show' && {
+        showStatus: newEvent.showStatus,
+        coRealizationPercentage: newEvent.coRealizationPercentage
+      })
     };
+
+    console.log('Final updated event:', eventData);
+    
+    if (modalType === 'add') {
+      await api.post('/events', eventData);
+      setSuccess('Événement créé avec succès');
+    } else if (modalType === 'edit') {
+      await api.patch(`/events/${newEvent.id}`, eventData);
+      setSuccess('Événement mis à jour avec succès');
+    }
+
+    setShowModal(false);
+    fetchEvents();
     
     try {
       await api.post('/events', eventData);
@@ -614,10 +744,15 @@ const Calendar = () => {
         end: new Date(newEvent.end).toISOString(),
         roomId: newEvent.roomId,
         type: newEvent.type,
+        showStatus: newEvent.showStatus,
         description: newEvent.description,
         creatorId: user.id,
         coRealizationPercentage: newEvent.coRealizationPercentage,
-        assignedUsers: newEvent.assignedUsers // Ajout des utilisateurs assignés
+        assignedUsers: newEvent.assignedUsers, // Ajout des utilisateurs assignés
+        ticketingLocation: '',
+        hasDecor: false,
+        decorDetails: '',
+
       };
       
       // Ajouter le statut du spectacle si c'est un spectacle
@@ -749,9 +884,15 @@ const Calendar = () => {
               right: 'dayGridMonth,timeGridWeek,timeGridDay'
             }}
             locale="fr"
+            buttonText={{
+              today: "Aujourd'hui",
+              month: 'Mois',
+              week: 'Semaine',
+              day: 'Jour'
+            }}
             firstDay={1}
             slotMinTime="08:00:00"
-            slotMaxTime="23:00:00"
+            slotMaxTime="25:00:00"
             allDaySlot={false}
             editable={false}
             selectable={true}
@@ -936,6 +1077,8 @@ const Calendar = () => {
                   </button>
                 </div>
               </div>
+
+              
               
               {/* Show status buttons for shows - Design amélioré */}
               {currentEvent?.extendedProps?.type === 'show' && (
@@ -1067,11 +1210,31 @@ const Calendar = () => {
                         onChange={handleInputChange}
                         className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
                       >
-                        {showStatusOptions.map(status => (
-                          <option key={status.value} value={status.value}>{status.label}</option>
+                        {showStatusOptions.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
                         ))}
                       </select>
                     </div>
+
+                     {/* Add ticketing location field when status is ticketsOpen */}
+                     {newEvent.showStatus === 'ticketsOpen' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                          <div className="h-4 w-4 rounded-full mr-2 bg-green-500"></div>
+                          Lieu de vente des billets
+                        </label>
+                        <input
+                          type="text"
+                          name="ticketingLocation"
+                          value={newEvent.ticketingLocation}
+                          onChange={handleInputChange}
+                          className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                          placeholder="Ex: Site web, Fnac, etc."
+                        />
+                      </div>
+                     )}
                     
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
@@ -1092,6 +1255,59 @@ const Calendar = () => {
                   </>
                 )}
                 
+                <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        <div className="h-4 w-4 rounded-full mr-2 bg-primary"></div>
+                        Décors
+                      </label>
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-3">
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name="hasDecor"
+                              value="true"
+                              checked={newEvent.hasDecor === true}
+                              onChange={(e) => setNewEvent(prev => ({
+                                ...prev,
+                                hasDecor: e.target.value === "true",
+                                decorDetails: e.target.value === "false" ? "" : prev.decorDetails
+                              }))}
+                              className="form-radio text-primary"
+                            />
+                            <span className="ml-2">Oui</span>
+                          </label>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name="hasDecor"
+                              value="false"
+                              checked={newEvent.hasDecor === false}
+                              onChange={(e) => setNewEvent(prev => ({
+                                ...prev,
+                                hasDecor: e.target.value === "true",
+                                decorDetails: e.target.value === "false" ? "" : prev.decorDetails
+                              }))}
+                              className="form-radio text-primary"
+                            />
+                            <span className="ml-2">Non</span>
+                          </label>
+                        </div>
+                        
+                        {newEvent.hasDecor && (
+                          <textarea
+                            name="decorDetails"
+                            value={newEvent.decorDetails}
+                            onChange={handleInputChange}
+                            placeholder="Description des décors..."
+                            className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                            rows="3"
+                          />
+                        )}
+                      </div>
+                    </div>
+                
+
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
                     <ClipboardIcon className="h-4 w-4 text-primary mr-2" />

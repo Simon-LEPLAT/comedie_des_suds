@@ -119,79 +119,23 @@ const checkShowLimit = async (roomId, date, eventId = null) => {
 // Create a new event
 exports.createEvent = async (req, res) => {
   try {
-    // Extract assignedUsers from request body
     const { assignedUsers, ...eventData } = req.body;
     
-    console.log('Creating event:', eventData.type, 'in room', eventData.roomId);
+    console.log('Received event data for creation:', eventData);
     
-    // Check if this is a show and if we've reached the daily limit
-    if (eventData.type === 'show') {
-      const startDate = new Date(eventData.start);
-      console.log('Checking show limit for date:', startDate);
-      const hasReachedLimit = await checkShowLimit(eventData.roomId, startDate);
-      
-      console.log('Has reached limit:', hasReachedLimit);
-      
-      if (hasReachedLimit) {
-        console.log('Limit reached, returning error');
-        return res.status(400).json({
-          status: 'error',
-          message: 'Limite de 5 spectacles par jour atteinte pour cette salle'
-        });
-      }
-    }
+    // Forcer les valeurs pour les champs problématiques
+    const eventToCreate = {
+      ...eventData,
+      ticketingLocation: eventData.ticketingLocation || '',
+      hasDecor: Boolean(eventData.hasDecor),
+      decorDetails: eventData.decorDetails || ''
+    };
     
-    // Check for overlapping events in the same room
-    const overlappingEvents = await Event.findAll({
-      where: {
-        roomId: eventData.roomId,
-        [Op.or]: [
-          {
-            // Event starts during another event
-            start: {
-              [Op.lt]: eventData.end,
-              [Op.gte]: eventData.start
-            }
-          },
-          {
-            // Event ends during another event
-            end: {
-              [Op.gt]: eventData.start,
-              [Op.lte]: eventData.end
-            }
-          },
-          {
-            // Event completely contains another event
-            start: {
-              [Op.lte]: eventData.start
-            },
-            end: {
-              [Op.gte]: eventData.end
-            }
-          }
-        ]
-      },
-      include: [
-        {
-          model: Room,
-          attributes: ['id', 'name']
-        }
-      ]
-    });
-    
-    // Check if any of the overlapping events can't overlap with the new event
-    const conflictingEvents = overlappingEvents.filter(event => !canEventsOverlap(eventData.type, event.type));
-    
-    if (conflictingEvents.length > 0) {
-      return res.status(400).json({
-        status: 'error',
-        message: `Conflit d'horaire avec l'événement "${conflictingEvents[0].title}" dans la salle ${conflictingEvents[0].Room.name}`
-      });
-    }
+    console.log('Event data to be created:', eventToCreate);
     
     // Create the event
     const event = await Event.create({
-      ...eventData,
+      ...eventToCreate,
       creatorId: req.user.id
     });
     
@@ -220,6 +164,12 @@ exports.createEvent = async (req, res) => {
       ]
     });
     
+    console.log('Created event special fields:', {
+      ticketingLocation: createdEvent.ticketingLocation,
+      hasDecor: createdEvent.hasDecor,
+      decorDetails: createdEvent.decorDetails
+    });
+    
     res.status(201).json({
       status: 'success',
       data: {
@@ -238,10 +188,10 @@ exports.createEvent = async (req, res) => {
 // Update event
 exports.updateEvent = async (req, res) => {
   try {
-    // Extract assignedUsers from request body
     const { assignedUsers, ...eventData } = req.body;
     
-    // Find the event
+    console.log('Received event data for update:', eventData);
+    
     const event = await Event.findByPk(req.params.id);
     
     if (!event) {
@@ -318,14 +268,43 @@ exports.updateEvent = async (req, res) => {
       }
     }
     
-    // Update event data
-    await event.update(eventData);
+    // Create update object with proper handling of special fields
+    const updateData = { ...eventData };
     
-    // If assignedUsers is provided, update user associations
-    if (assignedUsers !== undefined) {
-      await event.setUsers(assignedUsers);
+    // Forcer les valeurs pour les champs problématiques
+    if (eventData.hasOwnProperty('ticketingLocation')) {
+      // Si la valeur est null ou undefined, utiliser une chaîne vide
+      updateData.ticketingLocation = eventData.ticketingLocation || '';
     }
     
+    if (eventData.hasOwnProperty('hasDecor')) {
+      // Convertir explicitement en booléen
+      updateData.hasDecor = Boolean(eventData.hasDecor);
+    }
+    
+    if (eventData.hasOwnProperty('decorDetails')) {
+      // Si la valeur est null ou undefined, utiliser une chaîne vide
+      updateData.decorDetails = eventData.decorDetails || '';
+    }
+    
+    console.log('Update data to be sent:', updateData);
+    
+    // Mettre à jour l'événement avec les données préparées
+    await event.update(updateData);
+    
+    // Vérification immédiate après la mise à jour
+    const verifyUpdate = await Event.findByPk(event.id);
+    console.log('Verification after update:', {
+      ticketingLocation: verifyUpdate.ticketingLocation,
+      hasDecor: verifyUpdate.hasDecor,
+      decorDetails: verifyUpdate.decorDetails
+    });
+    
+    // If assignedUsers is provided, update the event's users
+    if (assignedUsers) {
+      await event.setUsers(assignedUsers);
+    }
+
     // Fetch the updated event with associations
     const updatedEvent = await Event.findByPk(event.id, {
       include: [
@@ -345,7 +324,14 @@ exports.updateEvent = async (req, res) => {
         }
       ]
     });
-    
+
+    // Verify the update worked
+    console.log('Final updated event:', {
+      ticketingLocation: updatedEvent.ticketingLocation,
+      hasDecor: updatedEvent.hasDecor,
+      decorDetails: updatedEvent.decorDetails
+    });
+
     res.status(200).json({
       status: 'success',
       data: {
@@ -624,10 +610,10 @@ exports.validateTheaterPlay = async (req, res) => {
   }
 };
 
-// Upload PDFs for an event
-exports.uploadPdfs = async (req, res) => {
+// Upload PDF for an event
+exports.uploadEventPdf = async (req, res) => {
   try {
-    const { eventId } = req.body;
+    const eventId = req.params.id;
     const event = await Event.findByPk(eventId);
     
     if (!event) {
@@ -637,29 +623,58 @@ exports.uploadPdfs = async (req, res) => {
       });
     }
     
-    // Handle file uploads (using multer middleware)
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
+    // Check if user has permission
+    if (req.user.role !== 'administrateur' && event.creatorId !== req.user.id) {
+      return res.status(403).json({
         status: 'error',
-        message: 'Aucun fichier téléchargé'
+        message: 'Vous n\'êtes pas autorisé à modifier cet événement'
       });
     }
     
-    // Save PDF information to database
-    const pdfPromises = req.files.map(file => {
-      return EventPdf.create({
-        eventId: eventId,
-        name: file.originalname,
-        url: `/uploads/${file.filename}`,
-        path: file.path
+    // Check if event already has 10 PDFs
+    const pdfCount = await EventPdf.count({ where: { eventId } });
+    if (pdfCount >= 10) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Limite de 10 PDF par événement atteinte'
       });
-    });
+    }
     
-    await Promise.all(pdfPromises);
+    // Create PDF record
+    const pdfData = {
+      name: req.file.originalname,
+      url: `/uploads/${req.file.filename}`,
+      path: req.file.path,
+      eventId
+    };
+    
+    const pdf = await EventPdf.create(pdfData);
+    
+    res.status(201).json({
+      status: 'success',
+      data: {
+        pdf
+      }
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// Get all PDFs for an event
+exports.getEventPdfs = async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const pdfs = await EventPdf.findAll({ where: { eventId } });
     
     res.status(200).json({
       status: 'success',
-      message: 'Fichiers PDF ajoutés avec succès'
+      data: {
+        pdfs
+      }
     });
   } catch (error) {
     res.status(500).json({
@@ -670,16 +685,10 @@ exports.uploadPdfs = async (req, res) => {
 };
 
 // Delete a PDF
-exports.deletePdf = async (req, res) => {
+exports.deleteEventPdf = async (req, res) => {
   try {
-    const { eventId, pdfId } = req.params;
-    
-    const pdf = await EventPdf.findOne({
-      where: {
-        id: pdfId,
-        eventId: eventId
-      }
-    });
+    const pdfId = req.params.pdfId;
+    const pdf = await EventPdf.findByPk(pdfId);
     
     if (!pdf) {
       return res.status(404).json({
@@ -688,18 +697,30 @@ exports.deletePdf = async (req, res) => {
       });
     }
     
-    // Delete file from filesystem
-    const fs = require('fs');
-    if (fs.existsSync(pdf.path)) {
-      fs.unlinkSync(pdf.path);
+    // Check if user has permission
+    const event = await Event.findByPk(pdf.eventId);
+    if (req.user.role !== 'administrateur' && event.creatorId !== req.user.id) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Vous n\'êtes pas autorisé à supprimer ce PDF'
+      });
     }
     
-    // Delete from database
+    // Delete the file from the server
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.join(__dirname, '..', pdf.path);
+    
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    
+    // Delete the record
     await pdf.destroy();
     
     res.status(200).json({
       status: 'success',
-      message: 'Fichier PDF supprimé avec succès'
+      message: 'PDF supprimé avec succès'
     });
   } catch (error) {
     res.status(500).json({

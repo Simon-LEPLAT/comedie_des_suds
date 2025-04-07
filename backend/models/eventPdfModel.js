@@ -13,6 +13,14 @@ const EventPdf = sequelize.define('EventPdf', {
   path: {
     type: DataTypes.STRING,
     allowNull: false
+  },
+  eventId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Events',
+      key: 'id'
+    }
   }
 });
 
