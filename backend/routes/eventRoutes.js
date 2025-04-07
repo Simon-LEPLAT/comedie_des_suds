@@ -46,7 +46,10 @@ router.post('/upload-pdfs', protect, upload.array('pdfs', 10), eventController.u
 
 router.delete('/:eventId/pdfs/:pdfId', protect, eventController.deletePdf);
 
-// Ajouter cette nouvelle route
-router.get('/users-by-role/:role', protect, eventController.getUsersByRole);
+// Add these routes after your existing event routes
+router
+  .route('/:eventId/users')
+  .post(protect, eventController.addUsersToEvent)
+  .delete(protect, eventController.removeUsersFromEvent);
 
 module.exports = router;

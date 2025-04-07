@@ -1,7 +1,7 @@
 const Event = require('../models/eventModel');
 const Room = require('../models/roomModel');
 const User = require('../models/userModel');
-const { Op } = require('sequelize'); // Add this import
+const { Op } = require('sequelize');
 
 // Get all events
 exports.getAllEvents = async (req, res) => {
@@ -116,7 +116,7 @@ const checkShowLimit = async (roomId, date, eventId = null) => {
   return showCount >= 5;
 };
 
-// Create a new event - KEEP ONLY THIS VERSION and remove all duplicates
+// Create a new event
 exports.createEvent = async (req, res) => {
   try {
     // Extract assignedUsers from request body
@@ -235,7 +235,7 @@ exports.createEvent = async (req, res) => {
   }
 };
 
-// Update event - KEEP ONLY THIS VERSION and remove all duplicates
+// Update event
 exports.updateEvent = async (req, res) => {
   try {
     // Extract assignedUsers from request body
@@ -361,14 +361,14 @@ exports.updateEvent = async (req, res) => {
   }
 };
 
-// Get a single event - KEEP ONLY THIS VERSION and remove all duplicates
+// Get a single event
 exports.getEvent = async (req, res) => {
   try {
     const event = await Event.findByPk(req.params.id, {
       include: [
         {
           model: Room,
-          attributes: ['id', 'name']
+          attributes: ['id', 'name', 'capacity']
         },
         {
           model: User,
@@ -404,21 +404,10 @@ exports.getEvent = async (req, res) => {
   }
 };
 
-// Get a single event - KEEP ONLY THIS VERSION and remove all duplicates
-exports.getEvent = async (req, res) => {
+// Delete an event
+exports.deleteEvent = async (req, res) => {
   try {
-    const event = await Event.findByPk(req.params.id, {
-      include: [
-        {
-          model: Room,
-          attributes: ['id', 'name']
-        },
-        {
-          model: User,
-          attributes: ['id', 'firstName', 'lastName', 'role']
-        }
-      ]
-    });
+    const event = await Event.findByPk(req.params.id);
     
     if (!event) {
       return res.status(404).json({
@@ -427,11 +416,19 @@ exports.getEvent = async (req, res) => {
       });
     }
     
+    // Check if the user has permission to delete this event
+    if (req.user.role !== 'administrateur' && event.creatorId !== req.user.id) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Vous n\'êtes pas autorisé à supprimer cet événement'
+      });
+    }
+    
+    await event.destroy();
+    
     res.status(200).json({
       status: 'success',
-      data: {
-        event
-      }
+      message: 'Événement supprimé avec succès'
     });
   } catch (error) {
     res.status(500).json({
@@ -441,54 +438,20 @@ exports.getEvent = async (req, res) => {
   }
 };
 
-// Create event - KEEP ONLY THIS VERSION and remove all duplicates
-exports.createEvent = async (req, res) => {
+// Add users to an event
+exports.addUsersToEvent = async (req, res) => {
   try {
-    const { 
-      title, 
-      start, 
-      end, 
-      roomId, 
-      type, 
-      description, 
-      color, 
-      showStatus,
-      coRealizationPercentage, // Ajout du pourcentage de co-réalisation
-      creatorId 
-    } = req.body;
+    const { eventId } = req.params;
+    const { userIds } = req.body;
     
-    // Create the event
-    const event = await Event.create({
-      title,
-      start,
-      end,
-      roomId,
-      type,
-      description,
-      color,
-      showStatus,
-      coRealizationPercentage, // Ajout du pourcentage de co-réalisation
-      creatorId: creatorId || req.user.id
-    });
+    if (!userIds || !Array.isArray(userIds)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Veuillez fournir un tableau d\'identifiants d\'utilisateurs'
+      });
+    }
     
-    res.status(201).json({
-      status: 'success',
-      data: {
-        event
-      }
-    });
-  } catch (error) {
-    res.status(400).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-};
-
-// Update an event - KEEP ONLY THIS VERSION and remove all duplicates
-exports.updateEvent = async (req, res) => {
-  try {
-    const event = await Event.findByPk(req.params.id);
+    const event = await Event.findByPk(eventId);
     
     if (!event) {
       return res.status(404).json({
@@ -505,76 +468,65 @@ exports.updateEvent = async (req, res) => {
       });
     }
     
-    // Check for overlapping events if room or time is changing
-    if (req.body.roomId || req.body.start || req.body.end) {
-      const roomId = req.body.roomId || event.roomId;
-      const start = req.body.start ? new Date(req.body.start) : event.start;
-      const end = req.body.end ? new Date(req.body.end) : event.end;
-      
-      // Find overlapping events in the same room
-      const overlappingEvents = await Event.findAll({
-        where: {
-          roomId: roomId,
-          id: { [Op.ne]: event.id }, // Exclude the current event being updated
-          [Op.or]: [
-            {
-              start: { [Op.lt]: end },
-              end: { [Op.gt]: start }
-            }
-          ]
-        }
-      });
-      
-      // Check if any of the overlapping events can't overlap with this event type
-      const eventType = req.body.type || event.type;
-      const conflictingEvents = overlappingEvents.filter(e => {
-        // Define which event types can overlap
-        // This should match your frontend logic
-        const canOverlap = (type1, type2) => {
-          // Define your overlap rules here based on event types
-          // For example:
-          if (type1 === 'permanence' || type1 === 'ticketing' || type1 === 'régie') {
-            return true; // These can overlap with anything
-          }
-          if (type2 === 'permanence' || type2 === 'ticketing' || type2 === 'régie') {
-            return true; // Anything can overlap with these
-          }
-          return false; // By default, no overlap
-        };
-        
-        return !canOverlap(eventType, e.type) && !canOverlap(e.type, eventType);
-      });
-      
-      if (conflictingEvents.length > 0) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Il y a déjà un événement prévu dans cette salle à cette période'
-        });
-      }
+    // Get current users
+    const currentUsers = await event.getUsers();
+    const currentUserIds = currentUsers.map(user => user.id);
+    
+    // Add new users (avoid duplicates)
+    const newUserIds = userIds.filter(id => !currentUserIds.includes(id));
+    
+    if (newUserIds.length > 0) {
+      await event.addUsers(newUserIds);
     }
     
-    // Update the event
-    await event.update(req.body);
+    // Fetch the updated event with associations
+    const updatedEvent = await Event.findByPk(eventId, {
+      include: [
+        {
+          model: Room,
+          attributes: ['id', 'name', 'capacity']
+        },
+        {
+          model: User,
+          as: 'Users',
+          attributes: ['id', 'firstName', 'lastName', 'role']
+        },
+        {
+          model: User,
+          as: 'Creator',
+          attributes: ['id', 'firstName', 'lastName', 'role']
+        }
+      ]
+    });
     
     res.status(200).json({
       status: 'success',
       data: {
-        event
+        event: updatedEvent
       }
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(400).json({
       status: 'error',
       message: error.message
     });
   }
 };
 
-// Delete an event
-// Ajout ou correction de la fonction deleteEvent
-exports.deleteEvent = async (req, res) => {
+// Remove users from an event
+exports.removeUsersFromEvent = async (req, res) => {
   try {
-    const event = await Event.findByPk(req.params.id);
+    const { eventId } = req.params;
+    const { userIds } = req.body;
+    
+    if (!userIds || !Array.isArray(userIds)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Veuillez fournir un tableau d\'identifiants d\'utilisateurs'
+      });
+    }
+    
+    const event = await Event.findByPk(eventId);
     
     if (!event) {
       return res.status(404).json({
@@ -583,35 +535,50 @@ exports.deleteEvent = async (req, res) => {
       });
     }
     
-    // Vérifier si l'utilisateur a les droits pour supprimer cet événement
+    // Check if the user has permission to update this event
     if (req.user.role !== 'administrateur' && event.creatorId !== req.user.id) {
       return res.status(403).json({
         status: 'error',
-        message: 'Vous n\'êtes pas autorisé à supprimer cet événement'
+        message: 'Vous n\'êtes pas autorisé à modifier cet événement'
       });
     }
     
-    // Supprimer les relations avec les utilisateurs assignés si elles existent
-    if (event.setUsers) {
-      await event.setUsers([]);
-    }
+    // Remove users
+    await event.removeUsers(userIds);
     
-    // Supprimer l'événement
-    await event.destroy();
+    // Fetch the updated event with associations
+    const updatedEvent = await Event.findByPk(eventId, {
+      include: [
+        {
+          model: Room,
+          attributes: ['id', 'name', 'capacity']
+        },
+        {
+          model: User,
+          as: 'Users',
+          attributes: ['id', 'firstName', 'lastName', 'role']
+        },
+        {
+          model: User,
+          as: 'Creator',
+          attributes: ['id', 'firstName', 'lastName', 'role']
+        }
+      ]
+    });
     
     res.status(200).json({
       status: 'success',
-      message: 'Événement supprimé avec succès'
+      data: {
+        event: updatedEvent
+      }
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(400).json({
       status: 'error',
       message: error.message
     });
   }
 };
-
-// Add these functions to your eventController.js
 
 // Validate theater play (max 5 per day per room)
 exports.validateTheaterPlay = async (req, res) => {

@@ -1,109 +1,203 @@
-import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { 
-  XMarkIcon, ClockIcon, MapPinIcon, UserIcon, PlusIcon, 
-  ClipboardIcon, ArrowPathIcon, TrashIcon, PencilIcon 
+  XMarkIcon, 
+  PlusIcon, 
+  TrashIcon, 
+  PencilIcon, 
+  ClockIcon, 
+  MapPinIcon, 
+  UserIcon, 
+  ClipboardIcon,
+  CheckIcon,
+  UserGroupIcon
 } from '@heroicons/react/24/outline';
-
-// Configuration des types d'événements avec leurs règles de chevauchement
-const eventTypes = [
-  { 
-    value: 'show', 
-    label: 'Spectacle', 
-    color: '#800000', 
-    canOverlapWith: ['permanence', 'ticketing', 'régie'] 
-  },
-  { 
-    value: 'calage', 
-    label: 'Calage', 
-    color: '#FF6B6B', 
-    canOverlapWith: ['permanence', 'ticketing', 'régie'] 
-  },
-  { 
-    value: 'rental', 
-    label: 'Location de salle', 
-    color: '#FFD700', 
-    canOverlapWith: ['permanence', 'ticketing', 'régie'] 
-  },
-  { 
-    value: 'event', 
-    label: 'Événement', 
-    color: '#9932CC', 
-    canOverlapWith: ['permanence', 'ticketing', 'régie'] 
-  },
-  { 
-    value: 'ticketing', 
-    label: 'Billetterie', 
-    color: '#1E3A8A', 
-    canOverlapWith: ['show', 'calage', 'rental', 'event', 'permanence', 'régie', 'ticketing'] 
-  },
-  { 
-    value: 'permanence', 
-    label: 'Permanence', 
-    color: '#2F4F4F', 
-    canOverlapWith: ['show', 'calage', 'rental', 'event', 'permanence', 'régie', 'ticketing'] 
-  },
-  { 
-    value: 'régie', 
-    label: 'Régie', 
-    color: '#8B4513', 
-    canOverlapWith: ['show', 'calage', 'rental', 'event', 'permanence', 'régie', 'ticketing'] 
-  }
-];
-
-// Nouvelles couleurs pour les statuts de spectacles
-const showStatusOptions = [
-  { value: 'provisional', label: 'Provisoire', color: '#FF9800' },  // Orange plus doux
-  { value: 'confirmed', label: 'Confirmé', color: '#4CAF50' },      // Vert plus visible
-  { value: 'cancelled', label: 'Annulé', color: '#F44336' },        // Rouge plus clair
-  { value: 'ticketsOpen', label: 'Billetterie ouverte', color: '#2196F3' } // Bleu plus vif
-];
-
-// Fonction utilitaire pour obtenir le label d'un type d'événement
-const getEventTypeLabel = (type) => eventTypes.find(t => t.value === type)?.label || type;
 
 const Calendar = () => {
   const { user, api } = useContext(AuthContext);
   const calendarRef = useRef(null);
   
-  // États
-  const [rooms, setRooms] = useState([]);
+  // États pour les données
   const [events, setEvents] = useState([]);
-  const [roomFilter, setRoomFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [showAllEvents, setShowAllEvents] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState('view'); // 'view', 'add', 'edit'
-  const [currentEvent, setCurrentEvent] = useState(null);
-  const [clipboardEvent, setClipboardEvent] = useState(null);
-  const [showSelectionDialog, setShowSelectionDialog] = useState(false);
-  const [selectedTimeInfo, setSelectedTimeInfo] = useState(null);
+  const [rooms, setRooms] = useState([]);
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   
-  // État pour le formulaire d'événement
+  // États pour les filtres
+  const [roomFilter, setRoomFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [showAllEvents, setShowAllEvents] = useState(true);
+  
+  // États pour le modal
+  const [showModal, setShowModal] = useState(false);
+  const [modalType, setModalType] = useState('add'); // 'add', 'edit', 'view'
+  const [currentEvent, setCurrentEvent] = useState(null);
   const [newEvent, setNewEvent] = useState({
     title: '',
     start: '',
     end: '',
     roomId: '',
     type: 'show',
-    coRealizationPercentage: '',
     showStatus: 'provisional',
     description: '',
-    color: eventTypes[0].color,
+    coRealizationPercentage: '',
+    color: '',
     assignedUsers: []
   });
-
-  // Formatage de date
-  const formatDate = (dateStr) => {
-    const date = new Date(dateStr);
+  
+  // États pour la sélection d'événement
+  const [showSelectionDialog, setShowSelectionDialog] = useState(false);
+  const [selectedTimeInfo, setSelectedTimeInfo] = useState(null);
+  
+  // États pour les messages
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  
+  // État pour le presse-papier
+  const [clipboardEvent, setClipboardEvent] = useState(null);
+  
+  // Options pour les types d'événements
+  const eventTypes = [
+    { value: 'show', label: 'Spectacle', color: '#800000', canOverlapWith: ['permanence', 'ticketing', 'régie'] },
+    { value: 'permanence', label: 'Permanence', color: '#4B0082', canOverlapWith: ['show', 'ticketing', 'régie', 'rental', 'calage', 'event'] },
+    { value: 'ticketing', label: 'Billetterie', color: '#008000', canOverlapWith: ['show', 'permanence', 'régie', 'rental', 'calage', 'event'] },
+    { value: 'régie', label: 'Régie', color: '#0000FF', canOverlapWith: ['show', 'permanence', 'ticketing', 'rental', 'calage', 'event'] },
+    { value: 'rental', label: 'Location salle', color: '#FF8C00', canOverlapWith: ['permanence', 'ticketing', 'régie'] },
+    { value: 'calage', label: 'Calage', color: '#800080', canOverlapWith: ['permanence', 'ticketing', 'régie'] },
+    { value: 'event', label: 'Événement', color: '#FF1493', canOverlapWith: ['permanence', 'ticketing', 'régie'] }
+  ];
+  
+  // Options pour les statuts de spectacle
+  const showStatusOptions = [
+    { value: 'confirmed', label: 'Confirmé', color: '#008000' },
+    { value: 'provisional', label: 'Provisoire', color: '#FFA500' },
+    { value: 'canceled', label: 'Annulé', color: '#FF0000' },
+    { value: 'ticketsOpen', label: 'Billetterie ouverte', color: '#0000FF' }
+  ];
+  
+  // Fonction pour récupérer les événements
+  const fetchEvents = useCallback(async () => {
+    try {
+      let url = '/events';
+      const params = [];
+      
+      if (roomFilter) params.push(`roomId=${roomFilter}`);
+      if (typeFilter) params.push(`type=${typeFilter}`);
+      if (!showAllEvents) params.push(`creatorId=${user.id}`);
+      
+      if (params.length > 0) {
+        url += `?${params.join('&')}`;
+      }
+      
+      const response = await api.get(url);
+      const fetchedEvents = response.data.data.events.map(event => ({
+        id: event.id,
+        title: event.title,
+        start: event.start,
+        end: event.end,
+        color: event.color,
+        extendedProps: {
+          type: event.type,
+          description: event.description,
+          room: event.Room,
+          creator: event.Creator,
+          users: event.Users,
+          showStatus: event.showStatus,
+          coRealizationPercentage: event.coRealizationPercentage
+        }
+      }));
+      
+      setEvents(fetchedEvents);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Erreur lors de la récupération des événements');
+    }
+  }, [api, roomFilter, typeFilter, showAllEvents, user.id]);
+  
+  // Fonction pour récupérer les salles
+  const fetchRooms = useCallback(async () => {
+    try {
+      const response = await api.get('/rooms');
+      setRooms(response.data.data.rooms);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Erreur lors de la récupération des salles');
+    }
+  }, [api]);
+  
+  // Fonction pour récupérer les utilisateurs
+  const fetchUsers = useCallback(async () => {
+    try {
+      const response = await api.get('/users');
+      setUsers(response.data.data.users);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Erreur lors de la récupération des utilisateurs');
+    }
+  }, [api]);
+  
+  // Effet pour charger les données initiales
+  useEffect(() => {
+    fetchRooms();
+    fetchUsers();
+    fetchEvents();
+  }, [fetchRooms, fetchUsers, fetchEvents]);
+  
+  // Effet pour filtrer les utilisateurs en fonction du type d'événement
+  useEffect(() => {
+    if (!users.length) return;
+    
+    let filtered = [...users];
+    
+    // Filtrer les utilisateurs en fonction du type d'événement
+    if (newEvent.type === 'show') {
+      filtered = users.filter(user => ['artiste', 'administrateur'].includes(user.role));
+    } else if (newEvent.type === 'technical') {
+      filtered = users.filter(user => ['technicien', 'administrateur'].includes(user.role));
+    } else if (newEvent.type === 'rehearsal') {
+      filtered = users.filter(user => ['artiste', 'technicien', 'administrateur'].includes(user.role));
+    } else if (newEvent.type === 'meeting') {
+      filtered = users.filter(user => ['administrateur', 'employé'].includes(user.role));
+    } else if (newEvent.type === 'permanence' || newEvent.type === 'ticketing') {
+      filtered = users.filter(user => ['employé', 'administrateur'].includes(user.role));
+    } else if (newEvent.type === 'régie') {
+      filtered = users.filter(user => ['technicien', 'administrateur'].includes(user.role));
+    }
+    
+    setFilteredUsers(filtered);
+  }, [users, newEvent.type]);
+  
+  // Helper function to check if a room already has 5 shows on a given day
+  const checkShowLimit = async (roomId, date) => {
+    try {
+      // Format the date to YYYY-MM-DD for the API query
+      const formattedDate = date.toISOString().split('T')[0];
+      
+      // Get all events for this room on this day
+      const response = await api.get(`/events?roomId=${roomId}&date=${formattedDate}`);
+      const roomEvents = response.data.data.events;
+      
+      // Count shows on this day
+      const showCount = roomEvents.filter(event => {
+        const eventDate = new Date(event.start);
+        return event.type === 'show' && 
+               eventDate.toISOString().split('T')[0] === formattedDate;
+      }).length;
+      
+      return showCount >= 5;
+    } catch (error) {
+      console.error('Error checking show limit:', error);
+      return false; // In case of error, allow the operation to proceed
+    }
+  };
+  
+  // Fonction pour formater la date pour l'affichage
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    
+    const date = new Date(dateString);
     return date.toLocaleString('fr-FR', {
       day: '2-digit',
       month: '2-digit',
@@ -112,148 +206,135 @@ const Calendar = () => {
       minute: '2-digit'
     });
   };
-
-  // Fonction utilitaire pour formater les dates pour les inputs
-  const formatDateForInput = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
+  
+  // Fonction pour formater la date pour les inputs
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
     
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
+    const date = new Date(dateString);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
   };
-
-  // Récupération des données
-  const fetchRooms = useCallback(async () => {
-    try {
-      const response = await api.get('/rooms');
-      setRooms(response.data.data.rooms);
-    } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors du chargement des salles');
+  
+  // Fonction pour obtenir le libellé d'un type d'événement
+  const getEventTypeLabel = (type) => {
+    const eventType = eventTypes.find(t => t.value === type);
+    return eventType ? eventType.label : type;
+  };
+  
+  // Fonction pour créer un nouvel événement
+  const handleNewEvent = (info) => {
+    const startDate = info.start || info.date || new Date();
+    let endDate = info.end || new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+    
+    // Si la sélection est sur une journée entière, ajuster l'heure de fin
+    if (info.allDay) {
+      endDate = new Date(startDate);
+      endDate.setHours(startDate.getHours() + 2);
     }
-  }, [api]);
-
-  const fetchEvents = useCallback(async () => {
-    try {
-      setError('');
-      
-      // Construction des paramètres de requête
-      const params = new URLSearchParams();
-      if (roomFilter) params.append('roomId', roomFilter);
-      if (typeFilter) params.append('type', typeFilter);
-      if (!showAllEvents) params.append('creatorId', user.id);
-      
-      const response = await api.get(`/events?${params.toString()}`);
-      
-      // Transformation des événements pour FullCalendar
-      const formattedEvents = response.data.data.events.map(event => ({
-        id: event.id,
-        title: event.title,
-        start: event.start,
-        end: event.end,
-        color: event.color,
-        borderColor: event.type === 'show' ? event.color : undefined,
-        borderWidth: event.type === 'show' ? 2 : undefined,
-        extendedProps: {
-          type: event.type,
-          description: event.description,
-          room: event.Room,
-          creator: event.Creator,
-          showStatus: event.showStatus,
-          coRealizationPercentage: event.coRealizationPercentage,
-          users: event.Users || [] // Ajout des utilisateurs assignés
-        }
-      }));
-      
-      setEvents(formattedEvents);
-    } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors du chargement des événements');
-    }
-  }, [api, roomFilter, typeFilter, showAllEvents, user?.id]);
-
-  // Fonction pour récupérer les utilisateurs
-  const fetchUsers = useCallback(async () => {
-    try {
-      const response = await api.get('/users');
-      setUsers(response.data.data.users || []);
-    } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors du chargement des utilisateurs');
-    }
-  }, [api]);
-
-  // Chargement des locales françaises
-  useEffect(() => {
-    import('@fullcalendar/core/locales/fr');
+    
+    setNewEvent({
+      title: '',
+      start: formatDateForInput(startDate),
+      end: formatDateForInput(endDate),
+      roomId: rooms.length > 0 ? rooms[0].id.toString() : '',
+      type: 'show',
+      showStatus: 'provisional',
+      description: '',
+      coRealizationPercentage: '',
+      color: eventTypes.find(t => t.value === 'show').color,
+      assignedUsers: []
+    });
+    
+    setModalType('add');
+    setShowModal(true);
+  };
+  
+  // Fonction pour gérer le clic sur un événement
+  const handleEventClick = useCallback((info) => {
+    const event = info.event;
+    setCurrentEvent({
+      id: event.id,
+      title: event.title,
+      start: event.start,
+      end: event.end,
+      color: event.backgroundColor,
+      extendedProps: event.extendedProps
+    });
+    setModalType('view');
+    setShowModal(true);
   }, []);
 
-  // Chargement initial des données
-  useEffect(() => {
-    fetchRooms();
-    fetchEvents();
-    fetchUsers();
-  }, [fetchRooms, fetchEvents, fetchUsers]);
-
-  // Fonction pour filtrer les utilisateurs en fonction du type d'événement
-  useEffect(() => {
-    if (users.length > 0 && newEvent.type) {
-      let filtered = [];
-      
-      switch(newEvent.type) {
-        case 'show':
-          filtered = users.filter(user => user.role === 'artiste');
-          break;
-        case 'régie':
-          filtered = users.filter(user => user.role === 'régie');
-          break;
-        case 'ticketing':
-          filtered = users.filter(user => user.role === 'billetterie');
-          break;
-        case 'permanence':
-        case 'event':
-          filtered = users.filter(user => user.role === 'permanence');
-          break;
-        default:
-          filtered = [];
-      }
-      
-      setFilteredUsers(filtered);
-    }
-  }, [users, newEvent.type]);
-
-  // Fonction pour gérer la sélection des utilisateurs
+  // Fonction pour gérer la sélection d'utilisateurs
   const handleUserSelection = (userId) => {
     setNewEvent(prev => {
-      const isSelected = prev.assignedUsers.includes(userId);
+      const assignedUsers = [...prev.assignedUsers];
       
-      if (isSelected) {
+      if (assignedUsers.includes(userId)) {
         // Retirer l'utilisateur s'il est déjà sélectionné
         return {
           ...prev,
-          assignedUsers: prev.assignedUsers.filter(id => id !== userId)
+          assignedUsers: assignedUsers.filter(id => id !== userId)
         };
       } else {
         // Ajouter l'utilisateur s'il n'est pas déjà sélectionné
         return {
           ...prev,
-          assignedUsers: [...prev.assignedUsers, userId]
+          assignedUsers: [...assignedUsers, userId]
         };
       }
     });
   };
-
-  const handleEventClick = useCallback((info) => {
-    setCurrentEvent({
-      id: info.event.id,
-      title: info.event.title,
-      start: info.event.start,
-      end: info.event.end,
-      color: info.event.backgroundColor,
-      extendedProps: info.event.extendedProps
-    });
-    setModalType('view');
-    setShowModal(true);
-  }, []);
+  
+  // Fonction pour afficher la section de sélection d'utilisateurs
+  const renderUserSelectionSection = () => {
+    if (modalType === 'view') return null;
+    
+    return (
+      <div className="mt-4">
+        <label className="block text-sm font-medium text-primary mb-2 flex items-center">
+          <UserGroupIcon className="h-5 w-5 mr-2 text-primary" />
+          Utilisateurs assignés
+        </label>
+        
+        {filteredUsers.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 border rounded-md">
+            {filteredUsers.map(user => (
+              <div 
+                key={user.id}
+                className={`flex items-center p-2 rounded-md cursor-pointer transition-colors ${
+                  newEvent.assignedUsers.includes(user.id) 
+                    ? 'bg-primary/10 border border-primary/30' 
+                    : 'hover:bg-gray-100'
+                }`}
+                onClick={() => handleUserSelection(user.id)}
+              >
+                <input
+                  type="checkbox"
+                  checked={newEvent.assignedUsers.includes(user.id)}
+                  onChange={() => {}} // Handled by the div onClick
+                  className="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary"
+                />
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-700">
+                    {user.firstName} {user.lastName}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {user.role}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-gray-500 italic p-2 border rounded-md">
+            Aucun utilisateur disponible pour ce type d'événement
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const handleConfirmShow = useCallback(async (newStatus) => {
     if (!currentEvent) return;
@@ -299,29 +380,6 @@ const Calendar = () => {
     setSuccess('Événement copié dans le presse-papier');
     setShowModal(false);
   };
-
-  const checkShowLimit = async (roomId, date) => {
-    try {
-      // Format the date to YYYY-MM-DD for the API query
-      const formattedDate = date.toISOString().split('T')[0];
-      
-      // Get all events for this room on this day
-      const response = await api.get(`/events?roomId=${roomId}&date=${formattedDate}`);
-      const roomEvents = response.data.data.events;
-      
-      // Count shows on this day
-      const showCount = roomEvents.filter(event => {
-        const eventDate = new Date(event.start);
-        return event.type === 'show' && 
-               eventDate.toISOString().split('T')[0] === formattedDate;
-      }).length;
-      
-      return showCount >= 5;
-    } catch (error) {
-      console.error('Error checking show limit:', error);
-      return false; // In case of error, allow the operation to proceed
-    }
-  };
   
   const handlePasteEvent = async (info) => {
     if (!clipboardEvent) {
@@ -359,7 +417,7 @@ const Calendar = () => {
       showStatus: clipboardEvent.showStatus || 'provisional',
       description: clipboardEvent.description || '',
       color: eventColor,
-      assignedUsers: clipboardEvent.assignedUsers || []
+      assignedUsers: clipboardEvent.assignedUsers || [] // Include assigned users when pasting
     };
     
     try {
@@ -369,7 +427,7 @@ const Calendar = () => {
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       setError(error.response?.data?.message || 'Erreur lors de la création de l\'événement');
-      setTimeout(() => setError(''), 5000);
+      setTimeout(() => setError(''), 5000); // Clear error after 5 seconds
     }
   };
 
@@ -384,40 +442,19 @@ const Calendar = () => {
     setShowSelectionDialog(true);
   };
   
-  const handleNewEvent = (info) => {
-    // Get the raw dates from the calendar selection
-    const startDate = info.start || new Date(info.dateStr);
-    const endDate = info.end || new Date(info.dateStr);
-    
-    if (info.dateStr) {
-      // Si c'est un clic sur une date, définir une durée par défaut de 2 heures
-      endDate.setHours(startDate.getHours() + 2);
-    }
-
-    setNewEvent({
-      title: '',
-      start: formatDateForInput(startDate),
-      end: formatDateForInput(endDate),
-      roomId: rooms.length > 0 ? rooms[0].id.toString() : '',
-      type: 'show',
-      showStatus: 'provisional',
-      description: '',
-      color: eventTypes.find(type => type.value === 'show')?.color || '#800000'
-    });
-    
-    setModalType('add');
-    setShowModal(true);
-  };
-
-  // Gestion du formulaire
+  // Fonction pour gérer les changements dans le formulaire
   const handleInputChange = (e) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
     
-    // Convertir les valeurs numériques
-    if (type === 'number') {
+    // Si le type d'événement change, mettre à jour la couleur
+    if (name === 'type') {
+      const eventType = eventTypes.find(type => type.value === value);
       setNewEvent(prev => ({
         ...prev,
-        [name]: value === '' ? '' : Number(value)
+        [name]: value,
+        color: eventType ? eventType.color : prev.color,
+        // Réinitialiser le statut du spectacle si le type n'est pas 'show'
+        showStatus: value === 'show' ? prev.showStatus : undefined
       }));
     } else {
       setNewEvent(prev => ({
@@ -497,7 +534,6 @@ const Calendar = () => {
         }
       }
       
-      
       // Vérifier les chevauchements d'événements
       if (newEvent.roomId) {
         // Récupérer tous les événements pour la même salle
@@ -557,7 +593,6 @@ const Calendar = () => {
         coRealizationPercentage: newEvent.coRealizationPercentage,
         assignedUsers: newEvent.assignedUsers // Ajout des utilisateurs assignés
       };
-      
       
       // Ajouter le statut du spectacle si c'est un spectacle
       if (newEvent.type === 'show') {
@@ -689,406 +724,447 @@ const Calendar = () => {
             }}
             locale="fr"
             firstDay={1}
-            allDaySlot={false}
             slotMinTime="08:00:00"
-            slotMaxTime="25:00:00"
-            height="auto"
+            slotMaxTime="23:00:00"
+            allDaySlot={false}
+            editable={false}
+            selectable={true}
+            selectMirror={true}
+            dayMaxEvents={true}
+            weekends={true}
+            nowIndicator={true}
             events={events}
             eventClick={handleEventClick}
             dateClick={handleDateClick}
-            selectable={true}
             select={handleSelect}
-            selectMirror={true}
-            unselectAuto={true}
-            eventOverlap={(stillEvent, movingEvent) => {
-              // Allow an event to overlap with itself (important for editing)
-              if (stillEvent.id === movingEvent.id) return true;
-              
-              // Make sure we have the extended properties
-              if (!stillEvent.extendedProps || !movingEvent.extendedProps) return false;
-              
-              // Get the event types
-              const stillEventType = stillEvent.extendedProps.type;
-              const movingEventType = movingEvent.extendedProps.type;
-              
-              // Check if they can overlap
-              return canEventsOverlap(movingEventType, stillEventType);
-            }}
-            slotEventOverlap={true}
-            buttonText={{
-              today: "Aujourd'hui",
-              month: "Mois",
-              week: "Semaine",
-              day: "Jour"
-            }}
+            height="auto"
             eventTimeFormat={{
               hour: '2-digit',
               minute: '2-digit',
+              meridiem: false,
+              hour12: false
+            }}
+            slotLabelFormat={{
+              hour: '2-digit',
+              minute: '2-digit',
+              meridiem: false,
               hour12: false
             }}
           />
         </div>
       </div>
+
+
+
       
-      {/* Modal d'événement */}
-      {showModal && (
+      {/* Modal pour la création/édition/visualisation d'événements */}
+  {showModal && (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-200">
+        {/* Modal header - Design amélioré */}
+        <div className="bg-gradient-to-r from-primary to-secondary text-white px-6 py-4 flex justify-between items-center rounded-t-lg">
+          <h3 className="text-xl font-semibold flex items-center">
+            {modalType === 'view' ? (
+              <span className="flex items-center">
+                <div className="h-4 w-4 rounded-full mr-2" style={{ backgroundColor: currentEvent?.color }}></div>
+               
+                Détails de l'événement
+              </span>
+            ) : modalType === 'add' ? (
+              <span className="flex items-center">
+                <PlusIcon className="h-5 w-5 mr-2" />
+                Ajouter un événement
+              </span>
+            ) : (
+              <span className="flex items-center">
+                <PencilIcon className="h-5 w-5 mr-2" />
+                Modifier l'événement
+              </span>
+            )}
+          </h3>
+          <button 
+            onClick={() => setShowModal(false)}
+            className="text-white hover:text-gray-200 bg-primary/30 hover:bg-primary/50 rounded-full p-1 transition-colors"
+          >
+            <XMarkIcon className="h-6 w-6" />
+          </button>
+        </div>
+        
+        {/* Modal content - Design amélioré */}
+        <div className="p-6">
+          {modalType === 'view' ? (
+            // View mode - Design amélioré
+            <div>
+              <h2 className="text-2xl font-bold mb-4 text-primary border-b pb-2">{currentEvent?.title}</h2>
+
+               {/* Information sur le créateur - Design amélioré et plus discret */}
+               {currentEvent?.extendedProps?.creator && (
+                <div className="mb-4">
+                  <div className="inline-flex items-center text-xs text-gray-500 italic">
+                    <UserIcon className="h-3 w-3 mr-1 text-primary/70" />
+                    Créé par <span className="font-medium ml-1 text-primary/80">{currentEvent.extendedProps.creator.firstName} {currentEvent.extendedProps.creator.lastName}</span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="flex items-start bg-gray-50 p-3 rounded-lg shadow-sm">
+                  <ClockIcon className="h-6 w-6 text-primary mr-3 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Début</p>
+                    <p className="font-medium">{formatDate(currentEvent?.start)}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start bg-gray-50 p-3 rounded-lg shadow-sm">
+                  <ClockIcon className="h-6 w-6 text-primary mr-3 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Fin</p>
+                    <p className="font-medium">{formatDate(currentEvent?.end)}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start bg-gray-50 p-3 rounded-lg shadow-sm">
+                  <MapPinIcon className="h-6 w-6 text-primary mr-3 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Salle</p>
+                    <p className="font-medium">{currentEvent?.extendedProps?.room?.name || 'Non spécifiée'}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start bg-gray-50 p-3 rounded-lg shadow-sm">
+                  <div className="h-6 w-6 rounded-full mr-3 mt-0.5 flex-shrink-0" style={{ backgroundColor: currentEvent?.color }}></div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Type</p>
+                    <p className="font-medium">{getEventTypeLabel(currentEvent?.extendedProps?.type)}</p>
+                    {currentEvent?.extendedProps?.type === 'show' && (
+                      <div className="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" 
+                           style={{ 
+                             backgroundColor: `${showStatusOptions.find(s => s.value === currentEvent?.extendedProps?.showStatus)?.color}20`,
+                             color: showStatusOptions.find(s => s.value === currentEvent?.extendedProps?.showStatus)?.color
+                           }}>
+                        {showStatusOptions.find(s => s.value === currentEvent?.extendedProps?.showStatus)?.label || 'Non défini'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {currentEvent?.extendedProps?.description && (
+                <div className="mb-6 bg-gray-50 p-4 rounded-lg shadow-sm">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <ClipboardIcon className="h-5 w-5 mr-2 text-primary" />
+                    Description
+                  </h4>
+                  <p className="text-gray-600 whitespace-pre-line">{currentEvent?.extendedProps?.description}</p>
+                </div>
+              )}
+              
+              {/* Display assigned users - Design amélioré */}
+              {currentEvent?.extendedProps?.users && currentEvent.extendedProps.users.length > 0 && (
+                <div className="mb-6 bg-gray-50 p-4 rounded-lg shadow-sm">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <UserGroupIcon className="h-5 w-5 mr-2 text-primary" />
+                    Utilisateurs assignés
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {currentEvent.extendedProps.users.map(user => (
+                      <div key={user.id} className="bg-white border border-gray-200 px-3 py-1.5 rounded-full text-sm flex items-center shadow-sm hover:shadow transition-shadow">
+                        <UserIcon className="h-4 w-4 mr-1.5 text-primary" />
+                        <span className="font-medium">{user.firstName} {user.lastName}</span>
+                        <span className="ml-1.5 text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                          {user.role}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex justify-between mt-6">
+                <div>
+                  <button
+                    onClick={handleEdit}
+                    className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md mr-2 flex items-center shadow-sm transition-colors"
+                  >
+                    <PencilIcon className="h-4 w-4 mr-1.5" />
+                    Modifier
+                  </button>
+                </div>
+                
+                <div className="flex">
+                  <button
+                    onClick={handleCopyEvent}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md mr-2 flex items-center shadow-sm transition-colors"
+                  >
+                    <ClipboardIcon className="h-4 w-4 mr-1.5" />
+                    Copier
+                  </button>
+                  
+                  <button
+                    onClick={handleDelete}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center shadow-sm transition-colors"
+                  >
+                    <TrashIcon className="h-4 w-4 mr-1.5" />
+                    Supprimer
+                  </button>
+                </div>
+              </div>
+              
+              {/* Show status buttons for shows - Design amélioré */}
+              {currentEvent?.extendedProps?.type === 'show' && (
+                <div className="mt-8 border-t pt-6">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
+                    <div className="h-4 w-4 rounded-full mr-2 bg-primary"></div>
+                    Changer le statut du spectacle
+                  </h4>
+                  <div className="flex flex-wrap gap-3">
+                    {showStatusOptions.map(status => (
+                      <button
+                        key={status.value}
+                        onClick={() => handleConfirmShow(status.value)}
+                        className={`px-4 py-2 rounded-md text-white text-sm flex items-center shadow-sm hover:shadow transition-shadow ${
+                          currentEvent?.extendedProps?.showStatus === status.value 
+                            ? 'ring-2 ring-offset-2 ring-white' 
+                            : 'hover:opacity-90'
+                        }`}
+                        style={{ backgroundColor: status.color }}
+                        disabled={currentEvent?.extendedProps?.showStatus === status.value}
+                      >
+                        {currentEvent?.extendedProps?.showStatus === status.value && (
+                          <CheckIcon className="h-4 w-4 mr-1.5" />
+                        )}
+                        {status.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            // Add/Edit mode - Design amélioré
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                    <div className="h-3 w-3 bg-primary rounded-full mr-2"></div>
+                    Titre
+                  </label>
+                  <input
+                    type="text"
+                    name="title"
+                    value={newEvent.title}
+                    onChange={handleInputChange}
+                    className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                    required
+                    placeholder="Titre de l'événement"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                    <ClockIcon className="h-4 w-4 text-primary mr-2" />
+                    Début
+                  </label>
+                  <input
+                    type="datetime-local"
+                    name="start"
+                    value={newEvent.start}
+                    onChange={handleInputChange}
+                    className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                    <ClockIcon className="h-4 w-4 text-primary mr-2" />
+                    Fin
+                  </label>
+                  <input
+                    type="datetime-local"
+                    name="end"
+                    value={newEvent.end}
+                    onChange={handleInputChange}
+                    className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                    <MapPinIcon className="h-4 w-4 text-primary mr-2" />
+                    Salle
+                  </label>
+                  <select
+                    name="roomId"
+                    value={newEvent.roomId}
+                    onChange={handleInputChange}
+                    className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                    required
+                  >
+                    <option value="">Sélectionner une salle</option>
+                    {rooms.map(room => (
+                      <option key={room.id} value={room.id}>{room.name}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                    <div className="h-4 w-4 rounded-full mr-2" style={{ backgroundColor: eventTypes.find(t => t.value === newEvent.type)?.color }}></div>
+                    Type d'événement
+                  </label>
+                  <select
+                    name="type"
+                    value={newEvent.type}
+                    onChange={handleInputChange}
+                    className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                    required
+                  >
+                    {eventTypes.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {newEvent.type === 'show' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        <div className="h-4 w-4 rounded-full mr-2" style={{ backgroundColor: showStatusOptions.find(s => s.value === newEvent.showStatus)?.color }}></div>
+                        Statut du spectacle
+                      </label>
+                      <select
+                        name="showStatus"
+                        value={newEvent.showStatus}
+                        onChange={handleInputChange}
+                        className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                      >
+                        {showStatusOptions.map(status => (
+                          <option key={status.value} value={status.value}>{status.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        <div className="h-4 w-4 rounded-full mr-2 bg-gold"></div>
+                        Pourcentage de co-réalisation (%)
+                      </label>
+                      <input
+                        type="number"
+                        name="coRealizationPercentage"
+                        value={newEvent.coRealizationPercentage}
+                        onChange={handleInputChange}
+                        className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                        min="0"
+                        max="100"
+                        placeholder="Ex: 50"
+                      />
+                    </div>
+                  </>
+                )}
+                
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                    <ClipboardIcon className="h-4 w-4 text-primary mr-2" />
+                    Description
+                  </label>
+                  <textarea
+                    name="description"
+                    value={newEvent.description}
+                    onChange={handleInputChange}
+                    className="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/20"
+                    rows="3"
+                    placeholder="Description de l'événement..."
+                  ></textarea>
+                </div>
+                
+                {/* User selection section - Design amélioré */}
+                <div className="md:col-span-2">
+                  {renderUserSelectionSection()}
+                </div>
+              </div>
+              
+              <div className="flex justify-end mt-8 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md mr-3 transition-colors"
+                >
+                  Annuler
+                </button>
+                
+                <button
+                  type="submit"
+                  className="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-md shadow-sm transition-colors flex items-center"
+                >
+                  {modalType === 'add' ? (
+                    <>
+                      <PlusIcon className="h-4 w-4 mr-1.5" />
+                      Créer
+                    </>
+                  ) : (
+                    <>
+                      <CheckIcon className="h-4 w-4 mr-1.5" />
+                      Mettre à jour
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  )}
+      
+      {/* Dialog for selecting action when clicking on calendar */}
+      {showSelectionDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            {/* En-tête du modal */}
-            <div className="flex justify-between items-center p-6 border-b">
-              <h3 className="text-xl font-semibold text-gray-900">
-                {modalType === 'add' ? 'Nouvel événement' : 
-                 modalType === 'edit' ? 'Modifier l\'événement' : 
-                 currentEvent?.title}
-              </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-500"
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="bg-primary text-white px-6 py-4 flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Que souhaitez-vous faire ?</h3>
+              <button 
+                onClick={() => setShowSelectionDialog(false)}
+                className="text-white hover:text-gray-200"
               >
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
             
-            {/* Affichage de l'événement */}
-            {modalType === 'view' && currentEvent && (
-              <div className="p-6">
-                {/* Badge de type d'événement */}
-                <div className="mb-6 flex justify-center">
-                  <span 
-                    className="px-4 py-2 rounded-full text-white text-sm font-medium shadow-sm"
-                    style={{ backgroundColor: currentEvent.color }}
-                  >
-                    {getEventTypeLabel(currentEvent.extendedProps.type)}
-                    {currentEvent.extendedProps.type === 'show' && currentEvent.extendedProps.showStatus && (
-                      <span className="ml-2">
-                        ({showStatusOptions.find(s => s.value === currentEvent.extendedProps.showStatus)?.label || currentEvent.extendedProps.showStatus})
-                      </span>
-                    )}
-                  </span>
-                </div>
-                
-                <div className="bg-gray-50 rounded-lg p-5 mb-4 shadow-sm border border-gray-100">
-                  <div className="flex items-center mb-4">
-                    <ClockIcon className="h-5 w-5 text-primary mr-3" />
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase font-semibold">Date et heure</p>
-                      <p className="text-sm text-gray-700">
-                        {formatDate(currentEvent.start)} - {formatDate(currentEvent.end)}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center mb-4">
-                    <MapPinIcon className="h-5 w-5 text-primary mr-3" />
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase font-semibold">Lieu</p>
-                      <p className="text-sm text-gray-700">
-                        {currentEvent.extendedProps.room?.name || 'Aucune salle'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <UserIcon className="h-5 w-5 text-primary mr-3" />
-                    <div>
-                      <p className="text-xs text-gray-5-000 uppercase font-semibold">Créateur</p>
-                      <p className="text-sm text-gray-700">
-                        {currentEvent.extendedProps.creator?.firstName} {currentEvent.extendedProps.creator?.lastName}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Description */}
-                {currentEvent.extendedProps.description && (
-                  <div className="mb-6">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Description</h4>
-                    <p className="text-sm text-gray-600 whitespace-pre-wrap">{currentEvent.extendedProps.description}</p>
-                  </div>
-                )}
-                
-                {/* Actions pour les spectacles */}
-                {currentEvent.extendedProps.type === 'show' && (
-                  <div className="mb-6">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Statut du spectacle</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {showStatusOptions.map(status => (
-                        <button
-                          key={status.value}
-                          onClick={() => handleConfirmShow(status.value)}
-                          className="px-3 py-1 rounded-md text-white text-xs font-medium shadow-sm transition-colors"
-                          style={{ backgroundColor: status.color }}
-                          disabled={currentEvent.extendedProps.showStatus === status.value}
-                        >
-                          {status.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Actions */}
-                <div className="flex justify-between mt-6">
-                  <div>
-                    <button
-                      onClick={handleDelete}
-                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center shadow-sm transition-colors"
-                    >
-                      <TrashIcon className="h-5 w-5 mr-1" />
-                      Supprimer
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleCopyEvent}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center shadow-sm transition-colors"
-                    >
-                      <ClipboardIcon className="h-5 w-5 mr-1" />
-                      Copier
-                    </button>
-                    <button
-                      onClick={handleEdit}
-                      className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md flex items-center shadow-sm transition-colors"
-                    >
-                      <PencilIcon className="h-5 w-5 mr-1" />
-                      Modifier
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Formulaire d'ajout/modification d'événement */}
-            {(modalType === 'add' || modalType === 'edit') && (
-              <form onSubmit={handleSubmit} className="p-6">
-                <div className="grid grid-cols-1 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-primary mb-1">
-                      Titre de l'événement*
-                    </label>
-                    <input
-                      type="text"
-                      name="title"
-                      value={newEvent.title}
-                      onChange={handleInputChange}
-                      required
-                      className="form-input w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
-                      placeholder="Titre de l'événement"
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-primary mb-1">
-                        Date et heure de début*
-                      </label>
-                      <input
-                        type="datetime-local"
-                        name="start"
-                        value={newEvent.start}
-                        onChange={handleInputChange}
-                        required
-                        className="form-input w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-primary mb-1">
-                        Date et heure de fin*
-                      </label>
-                      <input
-                        type="datetime-local"
-                        name="end"
-                        value={newEvent.end}
-                        onChange={handleInputChange}
-                        required
-                        className="form-input w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-primary mb-1">
-                        Type d'événement*
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {eventTypes.map(type => (
-                          <div 
-                            key={type.value}
-                            onClick={() => setNewEvent(prev => ({ ...prev, type: type.value }))}
-                            className={`cursor-pointer p-3 rounded-lg border-2 transition-all flex items-center ${
-                              newEvent.type === type.value 
-                                ? 'border-primary bg-primary/5' 
-                                : 'border-gray-200 hover:border-primary/30'
-                            }`}
-                          >
-                            <div 
-                              className="w-4 h-4 rounded-full mr-2" 
-                              style={{ backgroundColor: type.color }}
-                            ></div>
-                            <span className={`text-sm ${newEvent.type === type.value ? 'font-medium' : ''}`}>
-                              {type.label}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-primary mb-1">
-                        Salle*
-                      </label>
-                      <div className="relative">
-                        <select
-                          name="roomId"
-                          value={newEvent.roomId}
-                          onChange={handleInputChange}
-                          required
-                          className="form-select w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all appearance-none pl-4 pr-10 py-2"
-                        >
-                          <option value="">Sélectionner une salle</option>
-                          {rooms.map(room => (
-                            <option key={room.id} value={room.id}>{room.name}</option>
-                          ))}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                          <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                            <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {newEvent.type === 'show' && (
-                    <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
-                      <h3 className="text-primary font-medium mb-3">Options du spectacle</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-primary mb-1">
-                            Statut du spectacle
-                          </label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {showStatusOptions.map(status => (
-                              <div 
-                                key={status.value}
-                                onClick={() => setNewEvent(prev => ({ ...prev, showStatus: status.value }))}
-                                className={`cursor-pointer p-3 rounded-lg border-2 transition-all flex flex-col items-center ${
-                                  newEvent.showStatus === status.value 
-                                    ? 'border-primary shadow-md' 
-                                    : 'border-gray-200 hover:border-primary/30'
-                                }`}
-                                style={{ backgroundColor: newEvent.showStatus === status.value ? `${status.color}20` : '' }}
-                              >
-                                <div 
-                                  className="w-4 h-4 rounded-full mb-1" 
-                                  style={{ backgroundColor: status.color }}
-                                ></div>
-                                <span className={`text-sm text-center ${newEvent.showStatus === status.value ? 'font-medium' : ''}`}>
-                                  {status.label}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-primary mb-1">
-                            Co-réalisation (%)
-                          </label>
-                          <input
-                            type="number"
-                            name="coRealizationPercentage"
-                            value={newEvent.coRealizationPercentage || ''}
-                            onChange={handleInputChange}
-                            min="0"
-                            max="100"
-                            className="form-input w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
-                            placeholder="Pourcentage de co-réalisation"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-primary mb-1">
-                      Description
-                    </label>
-                    <textarea
-                      name="description"
-                      value={newEvent.description}
-                      onChange={handleInputChange}
-                      rows="4"
-                      className="form-textarea w-full rounded-md border-gold focus:border-primary focus:ring focus:ring-primary/20 transition-all"
-                      placeholder="Description de l'événement"
-                    ></textarea>
-                  </div>
-                </div>
-                
-                <div className="mt-6 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-md shadow-sm transition-colors"
-                  >
-                    {modalType === 'add' ? 'Créer' : 'Mettre à jour'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {/* Dialogue de sélection après clic sur date/heure */}
-      {showSelectionDialog && selectedTimeInfo && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Que souhaitez-vous faire ?
-              </h3>
+            <div className="p-6 flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  setShowSelectionDialog(false);
+                  handleNewEvent(selectedTimeInfo);
+                }}
+                className="bg-primary text-white px-4 py-3 rounded-md flex items-center justify-center"
+              >
+                <PlusIcon className="h-5 w-5 mr-2" />
+                Créer un nouvel événement
+              </button>
               
-              <div className="flex flex-col gap-3">
+              {clipboardEvent && (
                 <button
                   onClick={() => {
                     setShowSelectionDialog(false);
-                    handleNewEvent(selectedTimeInfo);
+                    handlePasteEvent(selectedTimeInfo);
                   }}
-                  className="w-full px-4 py-3 bg-primary hover:bg-primary/90 text-white rounded-md shadow-sm transition-colors flex items-center"
+                  className="bg-blue-600 text-white px-4 py-3 rounded-md flex items-center justify-center"
                 >
-                  <PlusIcon className="h-5 w-5 mr-2" />
-                  Créer un nouvel événement
+                  <ClipboardIcon className="h-5 w-5 mr-2" />
+                  Coller l'événement "{clipboardEvent.title}"
                 </button>
-                
-                {clipboardEvent && (
-                  <button
-                    onClick={() => {
-                      setShowSelectionDialog(false);
-                      handlePasteEvent(selectedTimeInfo);
-                    }}
-                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition-colors flex items-center"
-                  >
-                    <ClipboardIcon className="h-5 w-5 mr-2" />
-                    Coller l'événement ({clipboardEvent.title})
-                  </button>
-                )}
-                
-                <button
-                  onClick={() => setShowSelectionDialog(false)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-colors"
-                >
-                  Annuler
-                </button>
-              </div>
+              )}
+              
+              <button
+                onClick={() => setShowSelectionDialog(false)}
+                className="bg-gray-300 text-gray-800 px-4 py-3 rounded-md"
+              >
+                Annuler
+              </button>
             </div>
           </div>
         </div>
