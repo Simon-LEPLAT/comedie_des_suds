@@ -152,18 +152,26 @@ const Calendar = () => {
     let filtered = [...users];
     
     // Filtrer les utilisateurs en fonction du type d'événement
-    if (newEvent.type === 'show') {
-      filtered = users.filter(user => ['artiste', 'administrateur'].includes(user.role));
-    } else if (newEvent.type === 'technical') {
-      filtered = users.filter(user => ['technicien', 'administrateur'].includes(user.role));
-    } else if (newEvent.type === 'rehearsal') {
-      filtered = users.filter(user => ['artiste', 'technicien', 'administrateur'].includes(user.role));
-    } else if (newEvent.type === 'meeting') {
-      filtered = users.filter(user => ['administrateur', 'employé'].includes(user.role));
-    } else if (newEvent.type === 'permanence' || newEvent.type === 'ticketing') {
-      filtered = users.filter(user => ['employé', 'administrateur'].includes(user.role));
-    } else if (newEvent.type === 'régie') {
-      filtered = users.filter(user => ['technicien', 'administrateur'].includes(user.role));
+    switch (newEvent.type) {
+      case 'show':
+        filtered = users.filter(user => ['artiste', 'administrateur'].includes(user.role));
+        break;
+      case 'ticketing':
+        filtered = users.filter(user => ['billeterie', 'employé', 'administrateur'].includes(user.role));
+        break;
+      case 'régie':
+        filtered = users.filter(user => ['regie', 'administrateur'].includes(user.role));
+        break;
+      case 'permanence':
+        filtered = users.filter(user => ['permanence', 'administrateur'].includes(user.role));
+        break;
+      case 'event':
+      case 'calage':
+      case 'rental':
+        filtered = []; // No users can be assigned to these types
+        break;
+      default:
+        filtered = users;
     }
     
     setFilteredUsers(filtered);
@@ -290,6 +298,24 @@ const Calendar = () => {
   // Fonction pour afficher la section de sélection d'utilisateurs
   const renderUserSelectionSection = () => {
     if (modalType === 'view') return null;
+
+    // Define event types that don't allow user assignment
+    const disabledEventTypes = ['event', 'calage', 'rental'];
+    
+    // If current event type doesn't allow user assignment, show message
+    if (disabledEventTypes.includes(newEvent.type)) {
+      return (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+          <p className="text-sm text-gray-500 italic flex items-center">
+            <UserGroupIcon className="h-5 w-5 mr-2 text-gray-400" />
+            L'assignation d'utilisateurs n'est pas disponible pour ce type d'événement
+          </p>
+        </div>
+      );
+    }
+    
+    // Filter out administrators from the available users
+    const availableUsers = filteredUsers.filter(user => user.role !== 'administrateur');
     
     return (
       <div className="mt-4">
@@ -298,9 +324,9 @@ const Calendar = () => {
           Utilisateurs assignés
         </label>
         
-        {filteredUsers.length > 0 ? (
+        {availableUsers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 border rounded-md">
-            {filteredUsers.map(user => (
+            {availableUsers.map(user => (
               <div 
                 key={user.id}
                 className={`flex items-center p-2 rounded-md cursor-pointer transition-colors ${
