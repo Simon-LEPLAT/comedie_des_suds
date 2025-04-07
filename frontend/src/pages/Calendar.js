@@ -84,6 +84,8 @@ const Calendar = () => {
   const [clipboardEvent, setClipboardEvent] = useState(null);
   const [showSelectionDialog, setShowSelectionDialog] = useState(false);
   const [selectedTimeInfo, setSelectedTimeInfo] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
   
   // État pour le formulaire d'événement
   const [newEvent, setNewEvent] = useState({
@@ -95,8 +97,8 @@ const Calendar = () => {
     coRealizationPercentage: '',
     showStatus: 'provisional',
     description: '',
-
-    color: eventTypes[0].color
+    color: eventTypes[0].color,
+    assignedUsers: []
   });
 
   // Formatage de date
@@ -159,7 +161,8 @@ const Calendar = () => {
           room: event.Room,
           creator: event.Creator,
           showStatus: event.showStatus,
-          coRealizationPercentage: event.coRealizationPercentage // Ajout de cette ligne
+          coRealizationPercentage: event.coRealizationPercentage,
+          users: event.Users || [] // Ajout des utilisateurs assignés
         }
       }));
       
@@ -168,6 +171,16 @@ const Calendar = () => {
       setError(error.response?.data?.message || 'Erreur lors du chargement des événements');
     }
   }, [api, roomFilter, typeFilter, showAllEvents, user?.id]);
+
+  // Fonction pour récupérer les utilisateurs
+  const fetchUsers = useCallback(async () => {
+    try {
+      const response = await api.get('/users');
+      setUsers(response.data.data.users || []);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Erreur lors du chargement des utilisateurs');
+    }
+  }, [api]);
 
   // Chargement des locales françaises
   useEffect(() => {
@@ -178,9 +191,57 @@ const Calendar = () => {
   useEffect(() => {
     fetchRooms();
     fetchEvents();
-  }, [fetchRooms, fetchEvents]);
+    fetchUsers();
+  }, [fetchRooms, fetchEvents, fetchUsers]);
 
-  // Gestionnaires d'événements
+  // Fonction pour filtrer les utilisateurs en fonction du type d'événement
+  useEffect(() => {
+    if (users.length > 0 && newEvent.type) {
+      let filtered = [];
+      
+      switch(newEvent.type) {
+        case 'show':
+          filtered = users.filter(user => user.role === 'artiste');
+          break;
+        case 'régie':
+          filtered = users.filter(user => user.role === 'régie');
+          break;
+        case 'ticketing':
+          filtered = users.filter(user => user.role === 'billetterie');
+          break;
+        case 'permanence':
+        case 'event':
+          filtered = users.filter(user => user.role === 'permanence');
+          break;
+        default:
+          filtered = [];
+      }
+      
+      setFilteredUsers(filtered);
+    }
+  }, [users, newEvent.type]);
+
+  // Fonction pour gérer la sélection des utilisateurs
+  const handleUserSelection = (userId) => {
+    setNewEvent(prev => {
+      const isSelected = prev.assignedUsers.includes(userId);
+      
+      if (isSelected) {
+        // Retirer l'utilisateur s'il est déjà sélectionné
+        return {
+          ...prev,
+          assignedUsers: prev.assignedUsers.filter(id => id !== userId)
+        };
+      } else {
+        // Ajouter l'utilisateur s'il n'est pas déjà sélectionné
+        return {
+          ...prev,
+          assignedUsers: [...prev.assignedUsers, userId]
+        };
+      }
+    });
+  };
+
   const handleEventClick = useCallback((info) => {
     setCurrentEvent({
       id: info.event.id,
@@ -231,11 +292,35 @@ const Calendar = () => {
       description: currentEvent.extendedProps.description,
       color: currentEvent.color,
       showStatus: currentEvent.extendedProps.showStatus,
-      duration: new Date(currentEvent.end) - new Date(currentEvent.start)
+      duration: new Date(currentEvent.end) - new Date(currentEvent.start),
+      assignedUsers: currentEvent.extendedProps.users?.map(user => user.id) || []
     });
     
     setSuccess('Événement copié dans le presse-papier');
     setShowModal(false);
+  };
+
+  const checkShowLimit = async (roomId, date) => {
+    try {
+      // Format the date to YYYY-MM-DD for the API query
+      const formattedDate = date.toISOString().split('T')[0];
+      
+      // Get all events for this room on this day
+      const response = await api.get(`/events?roomId=${roomId}&date=${formattedDate}`);
+      const roomEvents = response.data.data.events;
+      
+      // Count shows on this day
+      const showCount = roomEvents.filter(event => {
+        const eventDate = new Date(event.start);
+        return event.type === 'show' && 
+               eventDate.toISOString().split('T')[0] === formattedDate;
+      }).length;
+      
+      return showCount >= 5;
+    } catch (error) {
+      console.error('Error checking show limit:', error);
+      return false; // In case of error, allow the operation to proceed
+    }
   };
   
   const handlePasteEvent = async (info) => {
@@ -254,6 +339,16 @@ const Calendar = () => {
     const eventTypeObj = eventTypes.find(type => type.value === clipboardEvent.type);
     const eventColor = eventTypeObj ? eventTypeObj.color : eventTypes[0].color;
     
+    // Check show limit if this is a show
+    if (clipboardEvent.type === 'show') {
+      const hasReachedLimit = await checkShowLimit(clipboardEvent.roomId, clickedDate);
+      if (hasReachedLimit) {
+        setError('Impossible d\'ajouter plus de 5 spectacles par jour dans cette salle');
+        setTimeout(() => setError(''), 5000);
+        return;
+      }
+    }
+    
     // Préparer les données de l'événement
     const eventData = {
       title: clipboardEvent.title,
@@ -264,7 +359,7 @@ const Calendar = () => {
       showStatus: clipboardEvent.showStatus || 'provisional',
       description: clipboardEvent.description || '',
       color: eventColor,
-      creatorId: user.id
+      assignedUsers: clipboardEvent.assignedUsers || []
     };
     
     try {
@@ -274,6 +369,7 @@ const Calendar = () => {
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       setError(error.response?.data?.message || 'Erreur lors de la création de l\'événement');
+      setTimeout(() => setError(''), 5000);
     }
   };
 
@@ -344,8 +440,9 @@ const Calendar = () => {
       type: currentEvent.extendedProps.type || 'show',
       showStatus: currentEvent.extendedProps.showStatus || 'provisional',
       description: currentEvent.extendedProps.description || '',
-      coRealizationPercentage: currentEvent.extendedProps.coRealizationPercentage || '', // Ajout de cette ligne
-      color: currentEvent.color
+      coRealizationPercentage: currentEvent.extendedProps.coRealizationPercentage || '',
+      color: currentEvent.color,
+      assignedUsers: currentEvent.extendedProps.users?.map(user => user.id) || []
     });
     
     setModalType('edit');
@@ -390,6 +487,16 @@ const Calendar = () => {
     try {
       setError('');
       setSuccess('');
+      
+      // Check show limit if this is a show and we're adding a new event
+      if (newEvent.type === 'show' && modalType === 'add') {
+        const hasReachedLimit = await checkShowLimit(newEvent.roomId, new Date(newEvent.start));
+        if (hasReachedLimit) {
+          setError('Impossible d\'ajouter plus de 5 spectacles par jour dans cette salle');
+          return;
+        }
+      }
+      
       
       // Vérifier les chevauchements d'événements
       if (newEvent.roomId) {
@@ -447,8 +554,10 @@ const Calendar = () => {
         type: newEvent.type,
         description: newEvent.description,
         creatorId: user.id,
-        coRealizationPercentage: newEvent.coRealizationPercentage // Ajout du pourcentage de co-réalisation
+        coRealizationPercentage: newEvent.coRealizationPercentage,
+        assignedUsers: newEvent.assignedUsers // Ajout des utilisateurs assignés
       };
+      
       
       // Ajouter le statut du spectacle si c'est un spectacle
       if (newEvent.type === 'show') {
@@ -475,6 +584,8 @@ const Calendar = () => {
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       setError(error.response?.data?.message || 'Erreur lors de la création/modification de l\'événement');
+      // Keep the error message visible longer
+      setTimeout(() => setError(''), 5000);
     }
   };
 

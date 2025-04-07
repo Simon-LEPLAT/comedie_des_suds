@@ -6,10 +6,7 @@ const User = require('./userModel');
 const Event = sequelize.define('Event', {
   title: {
     type: DataTypes.STRING,
-    allowNull: false,
-    validate: {
-      notEmpty: { msg: 'Le titre est requis' }
-    }
+    allowNull: false
   },
   start: {
     type: DataTypes.DATE,
@@ -48,16 +45,20 @@ const Event = sequelize.define('Event', {
   }
 });
 
-// Relationships
+// Define associations
 Event.belongsTo(Room, { foreignKey: 'roomId' });
-Room.hasMany(Event, { foreignKey: 'roomId' });
-
-// Creator relationship
 Event.belongsTo(User, { foreignKey: 'creatorId', as: 'Creator' });
-User.hasMany(Event, { foreignKey: 'creatorId' });
 
-// Many-to-many relationship with users (for assignments)
-Event.belongsToMany(User, { through: 'EventUsers' });
-User.belongsToMany(Event, { through: 'EventUsers' });
+// Add Many-to-Many relationship with User
+Event.belongsToMany(User, { 
+  through: 'EventUsers',
+  as: 'Users'
+});
+
+// Fix the alias here - change 'Events' to 'AssignedEvents'
+User.belongsToMany(Event, { 
+  through: 'EventUsers',
+  as: 'AssignedEvents'  // Changed from 'Events' to 'AssignedEvents'
+});
 
 module.exports = Event;

@@ -39,12 +39,23 @@ exports.getAllEvents = async (req, res) => {
     if (req.query.creatorId) {
       query.where.creatorId = req.query.creatorId;
     }
-
-    // If user is not an administrator, only show events they're assigned to
-    if (req.user.role !== 'administrateur') {
-      query.include[1].where = { id: req.user.id };
+    
+    // Add date filter for checking daily show limits
+    if (req.query.date) {
+      const date = new Date(req.query.date);
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      query.where.start = {
+        [Op.gte]: startOfDay,
+        [Op.lte]: endOfDay
+      };
     }
 
+    // Execute query
     const events = await Event.findAll(query);
     
     res.status(200).json({
@@ -54,7 +65,6 @@ exports.getAllEvents = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching events:', error);
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -102,28 +112,28 @@ const checkShowLimit = async (roomId, date, eventId = null) => {
   }
   
   const showCount = await Event.count(query);
+  console.log(`Room ${roomId} has ${showCount} shows on ${date.toDateString()}`);
   return showCount >= 5;
 };
 
-// Create a new event
+// Create a new event - KEEP ONLY THIS VERSION and remove all duplicates
 exports.createEvent = async (req, res) => {
   try {
-    const { title, start, end, roomId, type, description, color, showStatus, userIds } = req.body;
+    // Extract assignedUsers from request body
+    const { assignedUsers, ...eventData } = req.body;
     
-    // Validate required fields
-    if (!title || !start || !end || !roomId) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Veuillez fournir tous les champs requis'
-      });
-    }
+    console.log('Creating event:', eventData.type, 'in room', eventData.roomId);
     
-    // Check show limit if the event type is 'show'
-    if (type === 'show') {
-      const startDate = new Date(start);
-      const tooManyShows = await checkShowLimit(roomId, startDate);
+    // Check if this is a show and if we've reached the daily limit
+    if (eventData.type === 'show') {
+      const startDate = new Date(eventData.start);
+      console.log('Checking show limit for date:', startDate);
+      const hasReachedLimit = await checkShowLimit(eventData.roomId, startDate);
       
-      if (tooManyShows) {
+      console.log('Has reached limit:', hasReachedLimit);
+      
+      if (hasReachedLimit) {
+        console.log('Limit reached, returning error');
         return res.status(400).json({
           status: 'error',
           message: 'Limite de 5 spectacles par jour atteinte pour cette salle'
@@ -134,29 +144,29 @@ exports.createEvent = async (req, res) => {
     // Check for overlapping events in the same room
     const overlappingEvents = await Event.findAll({
       where: {
-        roomId,
+        roomId: eventData.roomId,
         [Op.or]: [
           {
             // Event starts during another event
             start: {
-              [Op.lt]: end,
-              [Op.gte]: start
+              [Op.lt]: eventData.end,
+              [Op.gte]: eventData.start
             }
           },
           {
             // Event ends during another event
             end: {
-              [Op.gt]: start,
-              [Op.lte]: end
+              [Op.gt]: eventData.start,
+              [Op.lte]: eventData.end
             }
           },
           {
             // Event completely contains another event
             start: {
-              [Op.lte]: start
+              [Op.lte]: eventData.start
             },
             end: {
-              [Op.gte]: end
+              [Op.gte]: eventData.end
             }
           }
         ]
@@ -170,7 +180,7 @@ exports.createEvent = async (req, res) => {
     });
     
     // Check if any of the overlapping events can't overlap with the new event
-    const conflictingEvents = overlappingEvents.filter(event => !canEventsOverlap(type, event.type));
+    const conflictingEvents = overlappingEvents.filter(event => !canEventsOverlap(eventData.type, event.type));
     
     if (conflictingEvents.length > 0) {
       return res.status(400).json({
@@ -181,23 +191,13 @@ exports.createEvent = async (req, res) => {
     
     // Create the event
     const event = await Event.create({
-      title,
-      start,
-      end,
-      roomId,
-      type,
-      description,
-      color,
-      showStatus,
-      creatorId: req.user.id // Set the creator ID to the current user
+      ...eventData,
+      creatorId: req.user.id
     });
     
-    // If userIds are provided, associate users with the event
-    if (userIds && userIds.length > 0) {
-      await event.setUsers(userIds);
-    } else {
-      // If no users specified, assign the creator
-      await event.setUsers([req.user.id]);
+    // If assignedUsers is provided, associate users with the event
+    if (assignedUsers && assignedUsers.length > 0) {
+      await event.setUsers(assignedUsers);
     }
     
     // Fetch the created event with associations
@@ -227,28 +227,27 @@ exports.createEvent = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(200).json({
-      status: 'success',
-      data: {
-        event: updatedEvent
-      }
+    console.error('Error creating event:', error);
+    res.status(400).json({
+      status: 'error',
+      message: error.message
     });
   }
 };
 
-// Update an event
+// Update event - KEEP ONLY THIS VERSION and remove all duplicates
 exports.updateEvent = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { title, start, end, roomId, type, description, color, showStatus, userIds } = req.body;
+    // Extract assignedUsers from request body
+    const { assignedUsers, ...eventData } = req.body;
     
     // Find the event
-    const event = await Event.findByPk(id);
+    const event = await Event.findByPk(req.params.id);
     
     if (!event) {
       return res.status(404).json({
         status: 'error',
-        message: 'Événement non trouvé'
+        message: 'Event not found'
       });
     }
     
@@ -260,19 +259,20 @@ exports.updateEvent = async (req, res) => {
       });
     }
     
-    // Check show limit if changing to show type or changing date/room of a show
-    const newType = type || event.type;
-    const newRoomId = roomId || event.roomId;
-    const newStart = start ? new Date(start) : new Date(event.start);
+    // Check if this is a show and if we've reached the daily limit
+    // Only check if the type is changing to 'show' or if the date or room is changing for an existing show
+    const newType = eventData.type || event.type;
+    const newRoomId = eventData.roomId || event.roomId;
+    const newStart = eventData.start ? new Date(eventData.start) : new Date(event.start);
     
     if (newType === 'show' && (
-        type !== event.type || 
-        start !== event.start || 
-        roomId !== event.roomId
+        eventData.type !== undefined || 
+        eventData.start !== undefined || 
+        eventData.roomId !== undefined
       )) {
-      const tooManyShows = await checkShowLimit(newRoomId, newStart, id);
+      const hasReachedLimit = await checkShowLimit(newRoomId, newStart, event.id);
       
-      if (tooManyShows) {
+      if (hasReachedLimit) {
         return res.status(400).json({
           status: 'error',
           message: 'Limite de 5 spectacles par jour atteinte pour cette salle'
@@ -280,43 +280,21 @@ exports.updateEvent = async (req, res) => {
       }
     }
     
-    // If changing time or room, check for overlapping events
-    if ((start && start !== event.start) || 
-        (end && end !== event.end) || 
-        (roomId && roomId !== event.roomId)) {
+    // Check for overlapping events if room or time is changing
+    if (eventData.roomId || eventData.start || eventData.end) {
+      const roomId = eventData.roomId || event.roomId;
+      const start = eventData.start ? new Date(eventData.start) : event.start;
+      const end = eventData.end ? new Date(eventData.end) : event.end;
       
-      const newStart = start || event.start;
-      const newEnd = end || event.end;
-      const newRoomId = roomId || event.roomId;
-      const newType = type || event.type;
-      
+      // Find overlapping events in the same room
       const overlappingEvents = await Event.findAll({
         where: {
-          id: { [Op.ne]: id }, // Exclude the current event
-          roomId: newRoomId,
+          roomId: roomId,
+          id: { [Op.ne]: event.id }, // Exclude the current event being updated
           [Op.or]: [
             {
-              // Event starts during another event
-              start: {
-                [Op.lt]: newEnd,
-                [Op.gte]: newStart
-              }
-            },
-            {
-              // Event ends during another event
-              end: {
-                [Op.gt]: newStart,
-                [Op.lte]: newEnd
-              }
-            },
-            {
-              // Event completely contains another event
-              start: {
-                [Op.lte]: newStart
-              },
-              end: {
-                [Op.gte]: newEnd
-              }
+              start: { [Op.lt]: end },
+              end: { [Op.gt]: start }
             }
           ]
         },
@@ -328,8 +306,9 @@ exports.updateEvent = async (req, res) => {
         ]
       });
       
-      // Check if any of the overlapping events can't overlap with the updated event
-      const conflictingEvents = overlappingEvents.filter(e => !canEventsOverlap(newType, e.type));
+      // Check if any of the overlapping events can't overlap with this event type
+      const eventType = eventData.type || event.type;
+      const conflictingEvents = overlappingEvents.filter(e => !canEventsOverlap(eventType, e.type));
       
       if (conflictingEvents.length > 0) {
         return res.status(400).json({
@@ -339,25 +318,16 @@ exports.updateEvent = async (req, res) => {
       }
     }
     
-    // Update the event
-    await event.update({
-      title: title || event.title,
-      start: start || event.start,
-      end: end || event.end,
-      roomId: roomId || event.roomId,
-      type: type || event.type,
-      description: description !== undefined ? description : event.description,
-      color: color || event.color,
-      showStatus: showStatus || event.showStatus
-    });
+    // Update event data
+    await event.update(eventData);
     
-    // Update associated users if provided
-    if (userIds && userIds.length > 0) {
-      await event.setUsers(userIds);
+    // If assignedUsers is provided, update user associations
+    if (assignedUsers !== undefined) {
+      await event.setUsers(assignedUsers);
     }
     
     // Fetch the updated event with associations
-    const updatedEvent = await Event.findByPk(id, {
+    const updatedEvent = await Event.findByPk(event.id, {
       include: [
         {
           model: Room,
@@ -383,6 +353,50 @@ exports.updateEvent = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Error updating event:', error);
+    res.status(400).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// Get a single event - KEEP ONLY THIS VERSION and remove all duplicates
+exports.getEvent = async (req, res) => {
+  try {
+    const event = await Event.findByPk(req.params.id, {
+      include: [
+        {
+          model: Room,
+          attributes: ['id', 'name']
+        },
+        {
+          model: User,
+          as: 'Users',
+          attributes: ['id', 'firstName', 'lastName', 'role']
+        },
+        {
+          model: User,
+          as: 'Creator',
+          attributes: ['id', 'firstName', 'lastName', 'role']
+        }
+      ]
+    });
+    
+    if (!event) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Événement non trouvé'
+      });
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        event
+      }
+    });
+  } catch (error) {
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -390,7 +404,7 @@ exports.updateEvent = async (req, res) => {
   }
 };
 
-// Get a single event
+// Get a single event - KEEP ONLY THIS VERSION and remove all duplicates
 exports.getEvent = async (req, res) => {
   try {
     const event = await Event.findByPk(req.params.id, {
@@ -427,47 +441,9 @@ exports.getEvent = async (req, res) => {
   }
 };
 
-// Get a single event
-exports.getEvent = async (req, res) => {
-  try {
-    const event = await Event.findByPk(req.params.id, {
-      include: [
-        {
-          model: Room,
-          attributes: ['id', 'name']
-        },
-        {
-          model: User,
-          attributes: ['id', 'firstName', 'lastName', 'role']
-        }
-      ]
-    });
-    
-    if (!event) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Événement non trouvé'
-      });
-    }
-    
-    res.status(200).json({
-      status: 'success',
-      data: {
-        event
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-};
-
-// Create event
+// Create event - KEEP ONLY THIS VERSION and remove all duplicates
 exports.createEvent = async (req, res) => {
   try {
-    // Extract event data from request body
     const { 
       title, 
       start, 
@@ -509,7 +485,7 @@ exports.createEvent = async (req, res) => {
   }
 };
 
-// Update an event
+// Update an event - KEEP ONLY THIS VERSION and remove all duplicates
 exports.updateEvent = async (req, res) => {
   try {
     const event = await Event.findByPk(req.params.id);
@@ -595,16 +571,10 @@ exports.updateEvent = async (req, res) => {
 };
 
 // Delete an event
+// Ajout ou correction de la fonction deleteEvent
 exports.deleteEvent = async (req, res) => {
   try {
-    const event = await Event.findByPk(req.params.id, {
-      include: [
-        {
-          model: User,
-          attributes: ['id']
-        }
-      ]
-    });
+    const event = await Event.findByPk(req.params.id);
     
     if (!event) {
       return res.status(404).json({
@@ -613,20 +583,25 @@ exports.deleteEvent = async (req, res) => {
       });
     }
     
-    // Check if user is authorized to delete this event
-    const userIds = event.Users.map(user => user.id);
-    if (req.user.role !== 'administrateur' && !userIds.includes(req.user.id)) {
+    // Vérifier si l'utilisateur a les droits pour supprimer cet événement
+    if (req.user.role !== 'administrateur' && event.creatorId !== req.user.id) {
       return res.status(403).json({
         status: 'error',
         message: 'Vous n\'êtes pas autorisé à supprimer cet événement'
       });
     }
     
+    // Supprimer les relations avec les utilisateurs assignés si elles existent
+    if (event.setUsers) {
+      await event.setUsers([]);
+    }
+    
+    // Supprimer l'événement
     await event.destroy();
     
-    res.status(204).json({
+    res.status(200).json({
       status: 'success',
-      data: null
+      message: 'Événement supprimé avec succès'
     });
   } catch (error) {
     res.status(500).json({
@@ -758,6 +733,37 @@ exports.deletePdf = async (req, res) => {
     res.status(200).json({
       status: 'success',
       message: 'Fichier PDF supprimé avec succès'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+// Ajout d'une nouvelle route pour récupérer les utilisateurs par rôle
+exports.getUsersByRole = async (req, res) => {
+  try {
+    const { role } = req.params;
+    
+    if (!role) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Le rôle est requis'
+      });
+    }
+    
+    const users = await User.findAll({
+      where: { role },
+      attributes: ['id', 'firstName', 'lastName', 'role']
+    });
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        users
+      }
     });
   } catch (error) {
     res.status(500).json({
