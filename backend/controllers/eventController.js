@@ -1,6 +1,7 @@
 const Event = require('../models/eventModel');
 const Room = require('../models/roomModel');
 const User = require('../models/userModel');
+const { Op } = require('sequelize'); // Add this import
 
 // Get all events
 exports.getAllEvents = async (req, res) => {
@@ -41,13 +42,13 @@ exports.createEvent = async (req, res) => {
     const conflictingEvents = await Event.findAll({
       where: {
         roomId,
-        [sequelize.Op.or]: [
+        [Op.or]: [ // Use Op instead of sequelize.Op
           {
             start: {
-              [sequelize.Op.lt]: end
+              [Op.lt]: end // Use Op instead of sequelize.Op
             },
             end: {
-              [sequelize.Op.gt]: start
+              [Op.gt]: start // Use Op instead of sequelize.Op
             }
           }
         ]
@@ -141,16 +142,16 @@ exports.updateEvent = async (req, res) => {
       const conflictingEvents = await Event.findAll({
         where: {
           id: {
-            [sequelize.Op.ne]: req.params.id
+            [Op.ne]: req.params.id // Use Op instead of sequelize.Op
           },
           roomId,
-          [sequelize.Op.or]: [
+          [Op.or]: [ // Use Op instead of sequelize.Op
             {
               start: {
-                [sequelize.Op.lt]: end
+                [Op.lt]: end // Use Op instead of sequelize.Op
               },
               end: {
-                [sequelize.Op.gt]: start
+                [Op.gt]: start // Use Op instead of sequelize.Op
               }
             }
           ]

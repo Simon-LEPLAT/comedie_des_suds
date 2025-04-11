@@ -20,7 +20,7 @@ const User = sequelize.define('User', {
   email: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true,
+    // Remove the unique: true line
     validate: {
       isEmail: { msg: 'Veuillez entrer un email valide' }
     }
@@ -53,7 +53,6 @@ const User = sequelize.define('User', {
   socialSecurityNumber: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true
   },
   showLeaveNumber: {
     type: DataTypes.STRING,
@@ -82,6 +81,15 @@ const User = sequelize.define('User', {
   lastLoginAttempt: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  // Ajouter ces champs pour la réinitialisation du mot de passe
+  resetPasswordToken: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  resetPasswordExpires: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   hooks: {
@@ -106,6 +114,8 @@ User.prototype.correctPassword = async function(candidatePassword) {
       console.error('No password found for user');
       return false;
     }
+    console.log('Comparing password:', candidatePassword.substring(0, 3) + '***');
+    console.log('With hashed password:', this.password.substring(0, 10) + '...');
     const isMatch = await bcrypt.compare(candidatePassword, this.password);
     console.log('Password comparison result:', isMatch);
     return isMatch;

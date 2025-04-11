@@ -24,9 +24,10 @@ async function startServer() {
     await sequelize.authenticate();
     console.log('Connected to database');
     
-    // Changed from force: true to alter: true to preserve data
-    await sequelize.sync({ alter: true });
-    console.log('Database synchronized');
+    // Disable automatic model synchronization to avoid the "Too many keys" error
+    // await sequelize.sync({ alter: true });
+    
+    console.log('Database connection established');
     
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

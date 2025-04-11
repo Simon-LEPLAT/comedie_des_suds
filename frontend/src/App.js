@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import Profile from './pages/Profile';
 import Dashboard from './pages/Dashboard';
 import UsersList from './pages/UsersList';
+import UserEdit from './pages/UserEdit'; // Add this import
 import Calendar from './pages/Calendar';
 import LockedUsers from './pages/LockedUsers';
 
@@ -36,6 +37,12 @@ function App() {
               <Route path="/users" element={
                 <PrivateRoute adminOnly={true}>
                   <UsersList />
+                </PrivateRoute>
+              } />
+              {/* Add the new route for UserEdit */}
+              <Route path="/users/edit/:id" element={
+                <PrivateRoute adminOnly={true}>
+                  <UserEdit />
                 </PrivateRoute>
               } />
               <Route path="/calendar" element={
